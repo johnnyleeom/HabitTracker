@@ -1,8 +1,8 @@
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
-    DarkTheme,
-    DefaultTheme,
-    ThemeProvider,
+  DarkTheme,
+  DefaultTheme,
+  ThemeProvider,
 } from "@react-navigation/native";
 import { Stack } from "expo-router";
 import "react-native-reanimated";
@@ -12,7 +12,13 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-      <Stack></Stack>
+      <Stack
+      // screenOptions={{
+      //   headerTransparent: true,
+      //   headerTitle: "",
+      //   headerShadowVisible: false,
+      // }}
+      ></Stack>
     </ThemeProvider>
   );
 }
