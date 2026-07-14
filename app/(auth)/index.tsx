@@ -29,7 +29,13 @@ export default function LogInScreen() {
           </View>
 
           <View style={styles.secondaryButton}>
-            <Button title={"Sign Up"} color="#5b50c8" onPress={() => {}} />
+            <Button
+              title={"Sign Up"}
+              color="#5b50c8"
+              onPress={() => {
+                router.push("/(auth)/signUpPage");
+              }}
+            />
           </View>
 
           {/* Start of --- or --- divider */}

@@ -3,27 +3,36 @@ import { router } from "expo-router";
 import { useState } from "react";
 import { Alert, Button, StyleSheet, Text, TextInput, View } from "react-native";
 
-export default function SignInPage() {
+export default function SignUpPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
-  async function handleUserSignIn() {
-    if (!email.trim() || !password) {
+  const isDisabled =
+    !email.trim() || !password || !confirmPassword || isLoading;
+
+  async function handleSignUp() {
+    if (password !== confirmPassword) {
       Alert.alert(
-        "Missing information",
-        "Please enter your email and password.",
+        "Passwords do not match",
+        "Please make sure both passwords are the same.",
       );
       return;
     }
 
-    const { data, error } = await supabase.auth.signInWithPassword({
+    setIsLoading(true);
+
+    const { data, error } = await supabase.auth.signUp({
       email: email.trim(),
       password,
     });
 
+    setIsLoading(false);
+
     if (error) {
-      console.log(error.message);
-      Alert.alert("Login failed", "Incorrect email or password.");
+      Alert.alert("Sign-up failed", error.message);
+      console.log(error);
       return;
     }
 
@@ -39,10 +48,10 @@ export default function SignInPage() {
             <Text style={styles.imagePlaceholderText}>Habit Tracker</Text>
           </View>
 
-          <Text style={styles.title}>Welcome back</Text>
+          <Text style={styles.title}>Create account</Text>
 
           <Text style={styles.subtitle}>
-            Sign in to continue tracking your habits.
+            Start building and tracking your daily habits.
           </Text>
         </View>
 
@@ -63,7 +72,7 @@ export default function SignInPage() {
           <Text style={styles.inputLabel}>Password</Text>
 
           <TextInput
-            placeholder="Enter your password"
+            placeholder="At least 6 characters"
             placeholderTextColor="#a1a1a6"
             value={password}
             onChangeText={setPassword}
@@ -72,23 +81,37 @@ export default function SignInPage() {
             style={styles.input}
           />
 
-          <View style={styles.primaryButton}>
+          <Text style={styles.inputLabel}>Confirm password</Text>
+
+          <TextInput
+            placeholder="Enter your password again"
+            placeholderTextColor="#a1a1a6"
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+            secureTextEntry
+            autoCapitalize="none"
+            style={styles.input}
+          />
+
+          <View
+            style={[styles.primaryButton, isDisabled && styles.disabledButton]}
+          >
             <Button
-              title="Sign In"
+              title={isLoading ? "Creating Account..." : "Create Account"}
               color="#ffffff"
-              onPress={handleUserSignIn}
-              disabled={!email.trim() || !password}
+              onPress={handleSignUp}
+              disabled={isDisabled}
             />
           </View>
 
-          <View style={styles.signUpRow}>
-            <Text style={styles.signUpText}>Don&apos;t have an account?</Text>
+          <View style={styles.signInRow}>
+            <Text style={styles.signInText}>Already have an account?</Text>
 
             <Text
-              style={styles.signUpLink}
-              onPress={() => router.push("/(auth)/signUpPage")}
+              style={styles.signInLink}
+              onPress={() => router.push("/(auth)/signInPage")}
             >
-              Sign Up
+              Sign In
             </Text>
           </View>
         </View>
@@ -106,27 +129,27 @@ const styles = StyleSheet.create({
 
   content: {
     flex: 1,
-    paddingTop: 80,
+    paddingTop: 65,
   },
 
   topSection: {
     alignItems: "center",
-    marginBottom: 45,
+    marginBottom: 36,
   },
 
   imagePlaceholder: {
-    width: 130,
-    height: 130,
-    borderRadius: 65,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
     backgroundColor: "#f0efff",
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 26,
+    marginBottom: 24,
   },
 
   imagePlaceholderText: {
     color: "#5b50c8",
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "600",
   },
 
@@ -163,7 +186,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#1d1d1f",
     backgroundColor: "#ffffff",
-    marginBottom: 18,
+    marginBottom: 16,
   },
 
   primaryButton: {
@@ -172,10 +195,14 @@ const styles = StyleSheet.create({
     backgroundColor: "#5b50c8",
     justifyContent: "center",
     overflow: "hidden",
-    marginTop: 6,
+    marginTop: 8,
   },
 
-  signUpRow: {
+  disabledButton: {
+    backgroundColor: "#b8b3e3",
+  },
+
+  signInRow: {
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
@@ -183,12 +210,12 @@ const styles = StyleSheet.create({
     gap: 5,
   },
 
-  signUpText: {
+  signInText: {
     fontSize: 14,
     color: "#86868b",
   },
 
-  signUpLink: {
+  signInLink: {
     fontSize: 14,
     color: "#5b50c8",
     fontWeight: "600",
