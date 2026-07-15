@@ -7,6 +7,8 @@ export default function SignInPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
+  const isDisabled = !email.trim() || !password;
+
   async function handleUserSignIn() {
     if (!email.trim() || !password) {
       Alert.alert(
@@ -72,7 +74,9 @@ export default function SignInPage() {
             style={styles.input}
           />
 
-          <View style={styles.primaryButton}>
+          <View
+            style={[styles.primaryButton, isDisabled && styles.disabledButton]}
+          >
             <Button
               title="Sign In"
               color="#ffffff"
@@ -173,6 +177,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     overflow: "hidden",
     marginTop: 6,
+  },
+
+  disabledButton: {
+    backgroundColor: "#b8b3e3",
   },
 
   signUpRow: {
