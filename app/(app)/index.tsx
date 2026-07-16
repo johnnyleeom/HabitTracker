@@ -1,5 +1,7 @@
+import { supabase } from "@/utils/supabase";
+import type { User } from "@supabase/supabase-js";
 import * as Haptics from "expo-haptics";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Alert,
   Button,
@@ -11,41 +13,122 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { Habit } from "../types/habit";
+import { NewHabit, StoredHabit } from "../types/habit";
 
 export default function HomeScreen() {
-  const [habits, setHabits] = useState<Habit[]>([]);
+  const [habits, setHabits] = useState<StoredHabit[]>([]);
   const [habitName, setHabitName] = useState("");
   const [isModalVisible, setIsModalVisible] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
 
-  function handleAddHabit() {
+  //retreving user id
+  useEffect(() => {
+    async function fetchUser() {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError) {
+        console.log(userError.message);
+        return;
+      }
+
+      setUser(user);
+    }
+
+    fetchUser();
+  }, []);
+
+  //retrieving user data. like habits
+  useEffect(() => {
+    async function fetchHabits() {
+      if (!user) {
+        console.log("no user logged in");
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("habits")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: true });
+
+      if (error) {
+        Alert.alert("Cannot retrieve data from database", error.message);
+        return;
+      }
+
+      setHabits(data);
+    }
+
+    fetchHabits();
+  }, [user]);
+
+  async function handleAddHabit() {
+    if (!user) {
+      console.log("No user is logged In");
+      return;
+    }
+
     const trimmedHabitName = habitName.trim();
 
     if (trimmedHabitName === "") {
       return;
     }
 
-    const newHabit: Habit = {
-      id: Date.now().toString(),
+    const newHabit: NewHabit = {
       name: trimmedHabitName,
+      user_id: user.id,
     };
 
-    setHabits((prevHabits) => [...prevHabits, newHabit]);
+    const { data, error } = await supabase
+      .from("habits")
+      .insert(newHabit)
+      .select()
+      .single();
+
+    if (error) {
+      Alert.alert(error.message);
+      return;
+    }
 
     setHabitName("");
     setIsModalVisible(false);
+
+    setHabits((prevHabits) => [...prevHabits, data]);
   }
 
-  function handleDeleteHabit(id: string) {
+  async function deleteHabitFromDB(habitId: number) {
+    if (!user) {
+      console.log("no user signed in");
+      return;
+    }
+
+    const { error } = await supabase
+      .from("habits")
+      .delete()
+      .eq("id", habitId)
+      .eq("user_id", user.id);
+
+    if (error) {
+      Alert.alert(error.message);
+      return;
+    }
+
+    setHabits((prevHabits) =>
+      prevHabits.filter((habit) => habit.id !== habitId),
+    );
+  }
+
+  function handleDeleteHabit(id: number) {
     Alert.alert("Delete Habit?", "Deleted habit cannot be restored.", [
       { text: "Cancel", style: "cancel" },
       {
         text: "Delete",
         style: "destructive",
         onPress: () => {
-          setHabits((prevHabits) =>
-            prevHabits.filter((habit) => habit.id !== id),
-          );
+          void deleteHabitFromDB(id);
         },
       },
     ]);
@@ -70,7 +153,7 @@ export default function HomeScreen() {
               key={habit.id}
               style={styles.habitCard}
               onLongPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
                 handleDeleteHabit(habit.id);
               }}
               delayLongPress={500}
