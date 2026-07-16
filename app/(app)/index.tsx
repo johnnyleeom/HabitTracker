@@ -1,10 +1,10 @@
 import { supabase } from "@/utils/supabase";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import type { User } from "@supabase/supabase-js";
 import * as Haptics from "expo-haptics";
 import { useEffect, useState } from "react";
 import {
   Alert,
-  Button,
   Modal,
   Pressable,
   ScrollView,
@@ -14,12 +14,18 @@ import {
   View,
 } from "react-native";
 import { NewHabit, StoredHabit } from "../types/habit";
+import { Day, days } from "../types/notificationFreq";
 
 export default function HomeScreen() {
   const [habits, setHabits] = useState<StoredHabit[]>([]);
   const [habitName, setHabitName] = useState("");
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [user, setUser] = useState<User | null>(null);
+  const [notificationTime, setNotificationTime] = useState(
+    new Date(2026, 0, 1, 23, 59),
+  );
+  const [selectedDays, setSelectedDays] = useState<Day[]>([]);
+  const isAddDisabled = habitName.trim() === "" || selectedDays.length === 0;
 
   //retreving user id
   useEffect(() => {
@@ -65,6 +71,23 @@ export default function HomeScreen() {
     fetchHabits();
   }, [user]);
 
+  //Helper functions start
+  function formatTimeForSupabase(date: Date): string {
+    const hours = date.getHours().toString().padStart(2, "0");
+    const minutes = date.getMinutes().toString().padStart(2, "0");
+    const seconds = date.getSeconds().toString().padStart(2, "0");
+
+    return `${hours}:${minutes}:${seconds}`;
+  }
+
+  function resetHabitForm() {
+    setHabitName("");
+    setNotificationTime(new Date(2026, 0, 1, 23, 59));
+    setSelectedDays([]);
+    setIsModalVisible(false);
+  }
+  //helper function ends
+
   async function handleAddHabit() {
     if (!user) {
       console.log("No user is logged In");
@@ -77,9 +100,18 @@ export default function HomeScreen() {
       return;
     }
 
+    if (selectedDays.length === 0) {
+      return;
+    }
+
+    const supabaseFormatDate = formatTimeForSupabase(notificationTime);
+
     const newHabit: NewHabit = {
       name: trimmedHabitName,
       user_id: user.id,
+      notification_time: supabaseFormatDate,
+      notification_enabled: true,
+      repeat_days: selectedDays,
     };
 
     const { data, error } = await supabase
@@ -93,8 +125,7 @@ export default function HomeScreen() {
       return;
     }
 
-    setHabitName("");
-    setIsModalVisible(false);
+    resetHabitForm();
 
     setHabits((prevHabits) => [...prevHabits, data]);
   }
@@ -132,6 +163,16 @@ export default function HomeScreen() {
         },
       },
     ]);
+  }
+
+  function toggleDay(day: Day) {
+    setSelectedDays((prevDays) => {
+      if (prevDays.includes(day)) {
+        return prevDays.filter((selectedDay) => selectedDay !== day);
+      }
+
+      return [...prevDays, day];
+    });
   }
 
   return (
@@ -182,12 +223,9 @@ export default function HomeScreen() {
         visible={isModalVisible}
         transparent
         animationType="slide"
-        onRequestClose={() => setIsModalVisible(false)}
+        onRequestClose={resetHabitForm}
       >
-        <Pressable
-          style={styles.modalBackground}
-          onPress={() => setIsModalVisible(false)}
-        >
+        <Pressable style={styles.modalBackground} onPress={resetHabitForm}>
           <Pressable
             style={styles.modalBox}
             onPress={(event) => event.stopPropagation()}
@@ -202,7 +240,65 @@ export default function HomeScreen() {
               onChangeText={setHabitName}
             />
 
-            <Button title="Add" onPress={handleAddHabit} />
+            <Text style={styles.modalTitle}>Reminder Time </Text>
+
+            <DateTimePicker
+              value={notificationTime}
+              mode="time"
+              display="spinner"
+              textColor="black"
+              onChange={(_, selectedTime) => {
+                if (selectedTime) {
+                  setNotificationTime(selectedTime);
+                }
+              }}
+            />
+
+            <Text style={styles.modalTitle}>Frequency</Text>
+            <View style={styles.daysContainer}>
+              {days.map((day) => {
+                const isSelected = selectedDays.includes(day.value);
+
+                return (
+                  <Pressable
+                    key={day.value}
+                    style={[
+                      styles.dayButton,
+                      isSelected && styles.selectedDayButton,
+                    ]}
+                    onPress={() => toggleDay(day.value)}
+                  >
+                    <Text
+                      style={[
+                        styles.dayText,
+                        isSelected && styles.selectedDayText,
+                      ]}
+                    >
+                      {day.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            {/* ADD BUTTON */}
+            <Pressable
+              style={[
+                styles.addButton,
+                isAddDisabled && styles.disabledAddButton,
+              ]}
+              onPress={handleAddHabit}
+              disabled={isAddDisabled}
+            >
+              <Text
+                style={[
+                  styles.addButtonText,
+                  isAddDisabled && styles.disabledAddButtonText,
+                ]}
+              >
+                Add
+              </Text>
+            </Pressable>
+            {/* ADD BUTTON END */}
           </Pressable>
         </Pressable>
       </Modal>
@@ -294,5 +390,56 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 16,
     color: "black",
+  },
+
+  daysContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 10,
+  },
+
+  dayButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#A0A0A0",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  selectedDayButton: {
+    backgroundColor: "#6C63FF",
+    borderColor: "#6C63FF",
+  },
+
+  dayText: {
+    color: "#333",
+    fontWeight: "600",
+  },
+
+  selectedDayText: {
+    color: "white",
+  },
+  addButton: {
+    backgroundColor: "#6C63FF",
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: "center",
+    marginTop: 20,
+  },
+
+  disabledAddButton: {
+    backgroundColor: "#d1d1d6",
+  },
+
+  addButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+
+  disabledAddButtonText: {
+    color: "#8e8e93",
   },
 });
