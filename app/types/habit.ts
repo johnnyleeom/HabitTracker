@@ -6,4 +6,8 @@ export type NewHabit = {
   repeat_days: string[];
 };
 
-export type StoredHabit = NewHabit & { id: number; createdAt: string };
+export type StoredHabit = NewHabit & {
+  id: number;
+  createdAt: string;
+  logs: Record<string, boolean>;
+};

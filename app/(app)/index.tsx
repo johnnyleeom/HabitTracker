@@ -2,6 +2,7 @@ import { supabase } from "@/utils/supabase";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import type { User } from "@supabase/supabase-js";
 import * as Haptics from "expo-haptics";
+import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   Alert,
@@ -25,7 +26,8 @@ export default function HomeScreen() {
     new Date(2026, 0, 1, 23, 59),
   );
   const [selectedDays, setSelectedDays] = useState<Day[]>([]);
-  const isAddDisabled = habitName.trim() === "" || selectedDays.length === 0;
+  const isAddHabitButtonDisabled =
+    habitName.trim() === "" || selectedDays.length === 0;
 
   //retreving user id
   useEffect(() => {
@@ -197,6 +199,14 @@ export default function HomeScreen() {
                 void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
                 handleDeleteHabit(habit.id);
               }}
+              onPress={() => {
+                router.navigate({
+                  pathname: "/(app)/calendar",
+                  params: {
+                    habitId: habit.id.toString(),
+                  },
+                });
+              }}
               delayLongPress={500}
             >
               <Text style={styles.habitName}>{habit.name}</Text>
@@ -284,15 +294,15 @@ export default function HomeScreen() {
             <Pressable
               style={[
                 styles.addButton,
-                isAddDisabled && styles.disabledAddButton,
+                isAddHabitButtonDisabled && styles.disabledAddButton,
               ]}
               onPress={handleAddHabit}
-              disabled={isAddDisabled}
+              disabled={isAddHabitButtonDisabled}
             >
               <Text
                 style={[
                   styles.addButtonText,
-                  isAddDisabled && styles.disabledAddButtonText,
+                  isAddHabitButtonDisabled && styles.disabledAddButtonText,
                 ]}
               >
                 Add
