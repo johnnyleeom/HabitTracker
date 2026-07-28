@@ -4,7 +4,7 @@ import BottomSheet, {
   BottomSheetView,
 } from "@gorhom/bottom-sheet";
 import { User } from "@supabase/supabase-js";
-import { useLocalSearchParams } from "expo-router";
+import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { CalendarList } from "react-native-calendars";
@@ -51,34 +51,41 @@ export default function CalendarScreen() {
     getUser();
   }, []);
 
+  useFocusEffect(
+    useCallback(() => {
+      async function fetchHabits() {
+        if (!user) return;
+
+        const { data, error } = await supabase
+          .from("habits")
+          .select("id, name, logs")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: true });
+
+        if (error) {
+          Alert.alert("Trouble retrieving habits", error.message);
+          return;
+        }
+
+        setHabits(data);
+      }
+
+      fetchHabits();
+    }, [user]),
+  );
+
   useEffect(() => {
-    async function fetchHabits() {
-      if (!user) {
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from("habits")
-        .select("id, name, logs")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: true });
-
-      if (error) {
-        Alert.alert("Trouble retrieving habits", error.message);
-        return;
-      }
-      console.log(data);
-      setHabits(data);
-
-      const habitFromHome = data.find(
-        (currentHabit) => currentHabit.id === Number(habitId),
-      );
-
-      setSelectedHabit(habitFromHome ?? data[0] ?? null);
+    if (habits.length === 0) {
+      setSelectedHabit(null);
+      return;
     }
 
-    fetchHabits();
-  }, [user, habitId]);
+    const habitFromHome = habits.find(
+      (currentHabit) => currentHabit.id === Number(habitId),
+    );
+
+    setSelectedHabit(habitFromHome ?? habits[0]);
+  }, [habitId, habits]);
 
   //to convert data into expected format for calendar
   const markedDates = useMemo(() => {
@@ -156,6 +163,7 @@ export default function CalendarScreen() {
 
       <View style={styles.calendarContainer}>
         <CalendarList
+          key={selectedHabit?.id ?? "no-habit"}
           markingType="custom"
           markedDates={markedDates}
           horizontal={false}
