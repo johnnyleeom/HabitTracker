@@ -6,8 +6,8 @@ import BottomSheet, {
 import { User } from "@supabase/supabase-js";
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
-import { CalendarList } from "react-native-calendars";
+import { Alert, Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { CalendarList, DateData } from "react-native-calendars";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 const CALENDAR_HEIGHT = 380;
@@ -26,6 +26,8 @@ export default function CalendarScreen() {
   const [selectedHabit, setSelectedHabit] = useState<CalendarHabit | null>(
     null,
   );
+  const [modalOpen, setModalOpen] = useState(false);
+  const [currDay, setCurrDay] = useState<DateData | null>(null);
 
   const { habitId } = useLocalSearchParams<{
     habitId?: string;
@@ -149,6 +151,11 @@ export default function CalendarScreen() {
     [],
   );
 
+  function editDate(day: DateData) {
+    setModalOpen(true);
+    setCurrDay(day);
+  }
+
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <View style={styles.header}>
@@ -164,6 +171,9 @@ export default function CalendarScreen() {
       <View style={styles.calendarContainer}>
         <CalendarList
           key={selectedHabit?.id ?? "no-habit"}
+          onDayPress={(day) => {
+            editDate(day);
+          }}
           markingType="custom"
           markedDates={markedDates}
           horizontal={false}
@@ -218,6 +228,48 @@ export default function CalendarScreen() {
           ))}
         </BottomSheetView>
       </BottomSheet>
+      <Modal visible={modalOpen} transparent animationType="fade">
+        <Pressable
+          style={styles.modalBackground}
+          onPress={() => setModalOpen(false)}
+        >
+          <Pressable
+            style={styles.modalBox}
+            onPress={(event) => event.stopPropagation()}
+          >
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Update Habit</Text>
+
+              <Pressable
+                style={styles.closeButton}
+                onPress={() => setModalOpen(false)}
+              >
+                <Text style={styles.closeButtonText}>✕</Text>
+              </Pressable>
+            </View>
+
+            <Text style={styles.modalDate}>{currDay?.dateString}</Text>
+
+            <Text style={styles.modalQuestion}>
+              Did you complete{" "}
+              <Text style={styles.habitName}>{selectedHabit?.name}</Text> on
+              this day?
+            </Text>
+
+            <View style={styles.modalButtons}>
+              <Pressable style={[styles.statusButton, styles.yesButton]}>
+                <Text style={styles.statusIcon}>✓</Text>
+                <Text style={styles.statusButtonText}>Yes, completed</Text>
+              </Pressable>
+
+              <Pressable style={[styles.statusButton, styles.noButton]}>
+                <Text style={styles.statusIcon}>✕</Text>
+                <Text style={styles.statusButtonText}>No, not completed</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -308,5 +360,126 @@ const styles = StyleSheet.create({
     color: "#0a84ff",
     fontSize: 20,
     fontWeight: "700",
+  },
+  modalBackground: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 24,
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+  },
+
+  modalBox: {
+    width: "100%",
+    maxWidth: 400,
+    padding: 22,
+    backgroundColor: "#1c1c1e",
+    borderRadius: 22,
+    shadowColor: "#000000",
+    shadowOffset: {
+      width: 0,
+      height: 10,
+    },
+    shadowOpacity: 0.35,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+
+  modalTitle: {
+    color: "#ffffff",
+    fontSize: 22,
+    fontWeight: "700",
+  },
+
+  closeButton: {
+    width: 32,
+    height: 32,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#2c2c2e",
+    borderRadius: 16,
+  },
+
+  closeButtonText: {
+    color: "#8e8e93",
+    fontSize: 15,
+    fontWeight: "700",
+  },
+
+  modalDate: {
+    alignSelf: "flex-start",
+    marginTop: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    color: "#0a84ff",
+    fontSize: 14,
+    fontWeight: "600",
+    backgroundColor: "rgba(10, 132, 255, 0.15)",
+    borderRadius: 10,
+  },
+
+  modalQuestion: {
+    marginTop: 20,
+    color: "#d1d1d6",
+    fontSize: 17,
+    lineHeight: 24,
+  },
+
+  habitName: {
+    color: "#ffffff",
+    fontWeight: "700",
+  },
+
+  modalButtons: {
+    gap: 12,
+    marginTop: 24,
+  },
+
+  statusButton: {
+    minHeight: 58,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    borderRadius: 14,
+  },
+
+  yesButton: {
+    backgroundColor: "#248a3d",
+  },
+
+  noButton: {
+    backgroundColor: "#c9342f",
+  },
+
+  statusIcon: {
+    color: "#ffffff",
+    fontSize: 18,
+    fontWeight: "700",
+  },
+
+  statusButtonText: {
+    color: "#ffffff",
+    fontSize: 17,
+    fontWeight: "600",
+  },
+
+  cancelButton: {
+    height: 48,
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 12,
+  },
+
+  cancelButtonText: {
+    color: "#8e8e93",
+    fontSize: 16,
+    fontWeight: "600",
   },
 });
