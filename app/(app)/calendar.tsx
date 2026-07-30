@@ -156,6 +156,41 @@ export default function CalendarScreen() {
     setCurrDay(day);
   }
 
+  async function updateCalendar(completed: boolean) {
+    if (!currDay || !selectedHabit) {
+      return;
+    }
+
+    const newLog = {
+      ...selectedHabit.logs,
+      [currDay.dateString]: completed,
+    };
+
+    const { error } = await supabase
+      .from("habits")
+      .update({ logs: newLog })
+      .eq("id", selectedHabit.id);
+
+    if (error) {
+      Alert.alert("Something went wrong while updating", error.message);
+      return;
+    }
+
+    setHabits((currentHabits) =>
+      currentHabits.map((habit) =>
+        habit.id === selectedHabit.id
+          ? {
+              ...habit,
+              logs: newLog,
+            }
+          : habit,
+      ),
+    );
+
+    setModalOpen(false);
+    setCurrDay(null);
+  }
+
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <View style={styles.header}>
@@ -231,7 +266,10 @@ export default function CalendarScreen() {
       <Modal visible={modalOpen} transparent animationType="fade">
         <Pressable
           style={styles.modalBackground}
-          onPress={() => setModalOpen(false)}
+          onPress={() => {
+            setModalOpen(false);
+            setCurrDay(null);
+          }}
         >
           <Pressable
             style={styles.modalBox}
@@ -242,7 +280,10 @@ export default function CalendarScreen() {
 
               <Pressable
                 style={styles.closeButton}
-                onPress={() => setModalOpen(false)}
+                onPress={() => {
+                  setModalOpen(false);
+                  setCurrDay(null);
+                }}
               >
                 <Text style={styles.closeButtonText}>✕</Text>
               </Pressable>
@@ -257,12 +298,18 @@ export default function CalendarScreen() {
             </Text>
 
             <View style={styles.modalButtons}>
-              <Pressable style={[styles.statusButton, styles.yesButton]}>
+              <Pressable
+                style={[styles.statusButton, styles.yesButton]}
+                onPress={() => updateCalendar(true)}
+              >
                 <Text style={styles.statusIcon}>✓</Text>
                 <Text style={styles.statusButtonText}>Yes, completed</Text>
               </Pressable>
 
-              <Pressable style={[styles.statusButton, styles.noButton]}>
+              <Pressable
+                style={[styles.statusButton, styles.noButton]}
+                onPress={() => updateCalendar(false)}
+              >
                 <Text style={styles.statusIcon}>✕</Text>
                 <Text style={styles.statusButtonText}>No, not completed</Text>
               </Pressable>
