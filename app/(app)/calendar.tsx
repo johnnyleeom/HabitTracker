@@ -16,7 +16,27 @@ type CalendarHabit = {
   id: number;
   name: string;
   logs: Record<string, boolean>;
+  repeat_days: string[];
+  created_at: string;
 };
+
+const daysToNumber: Record<string, number> = {
+  sunday: 0,
+  monday: 1,
+  tuesday: 2,
+  wednesday: 3,
+  thursday: 4,
+  friday: 5,
+  saturday: 6,
+};
+
+function formatDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
 
 export default function CalendarScreen() {
   const bottomSheetRef = useRef<BottomSheet>(null);
@@ -35,6 +55,7 @@ export default function CalendarScreen() {
 
   const snapPoints = useMemo(() => ["40%"], []);
 
+  //get user
   useEffect(() => {
     async function getUser() {
       const {
@@ -53,6 +74,7 @@ export default function CalendarScreen() {
     getUser();
   }, []);
 
+  // fetch habits when calendar tab becomes focused again
   useFocusEffect(
     useCallback(() => {
       async function fetchHabits() {
@@ -60,7 +82,7 @@ export default function CalendarScreen() {
 
         const { data, error } = await supabase
           .from("habits")
-          .select("id, name, logs")
+          .select("id, name, logs, repeat_days, created_at")
           .eq("user_id", user.id)
           .order("created_at", { ascending: true });
 
@@ -70,24 +92,17 @@ export default function CalendarScreen() {
         }
 
         setHabits(data);
+
+        const habitFromHome = data.find(
+          (habit) => habit.id === Number(habitId),
+        );
+
+        setSelectedHabit(habitFromHome ?? data[0] ?? null);
       }
 
       fetchHabits();
-    }, [user]),
+    }, [user, habitId]),
   );
-
-  useEffect(() => {
-    if (habits.length === 0) {
-      setSelectedHabit(null);
-      return;
-    }
-
-    const habitFromHome = habits.find(
-      (currentHabit) => currentHabit.id === Number(habitId),
-    );
-
-    setSelectedHabit(habitFromHome ?? habits[0]);
-  }, [habitId, habits]);
 
   //to convert data into expected format for calendar
   const markedDates = useMemo(() => {
@@ -130,6 +145,88 @@ export default function CalendarScreen() {
     );
   }, [selectedHabit]);
 
+  const streak = useMemo(() => {
+    if (!selectedHabit) {
+      return 0;
+    }
+
+    const frequencyInNumbers = selectedHabit.repeat_days.map(
+      (day) => daysToNumber[day],
+    );
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const createdDate = new Date(selectedHabit.created_at);
+    createdDate.setHours(0, 0, 0, 0);
+
+    const currentDate = new Date(today);
+
+    let currentStreak = 0;
+
+    while (currentDate >= createdDate) {
+      const dayNumber = currentDate.getDay();
+
+      if (frequencyInNumbers.includes(dayNumber)) {
+        const dateString = formatDate(currentDate);
+        const completed = selectedHabit.logs[dateString];
+
+        const isToday = currentDate.getTime() === today.getTime();
+
+        if (completed === true) {
+          currentStreak++;
+        } else if (!isToday) {
+          break;
+        }
+      }
+
+      currentDate.setDate(currentDate.getDate() - 1);
+    }
+
+    return currentStreak;
+  }, [selectedHabit]);
+
+  const maxStreak = useMemo(() => {
+    if (!selectedHabit) {
+      return 0;
+    }
+
+    const frequencyInNumbers = selectedHabit.repeat_days.map(
+      (day) => daysToNumber[day],
+    );
+
+    const createdDate = new Date(selectedHabit.created_at);
+    createdDate.setHours(0, 0, 0, 0);
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const currentDate = new Date(createdDate);
+
+    let currentRun = 0;
+    let longestRun = 0;
+
+    while (currentDate <= today) {
+      const dayNumber = currentDate.getDay();
+
+      if (frequencyInNumbers.includes(dayNumber)) {
+        const dateString = formatDate(currentDate);
+        const completed = selectedHabit.logs[dateString];
+
+        if (completed === true) {
+          currentRun++;
+          longestRun = Math.max(longestRun, currentRun);
+        } else {
+          currentRun = 0;
+        }
+      }
+
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    return longestRun;
+  }, [selectedHabit]);
+
   function openBottomSheet() {
     bottomSheetRef.current?.snapToIndex(0);
   }
@@ -156,15 +253,20 @@ export default function CalendarScreen() {
     setCurrDay(day);
   }
 
-  async function updateCalendar(completed: boolean) {
+  async function updateCalendar(completed: boolean | null) {
     if (!currDay || !selectedHabit) {
       return;
     }
 
     const newLog = {
       ...selectedHabit.logs,
-      [currDay.dateString]: completed,
     };
+
+    if (completed === null) {
+      delete newLog[currDay.dateString];
+    } else {
+      newLog[currDay.dateString] = completed;
+    }
 
     const { error } = await supabase
       .from("habits")
@@ -176,14 +278,16 @@ export default function CalendarScreen() {
       return;
     }
 
+    const updatedHabit = {
+      ...selectedHabit,
+      logs: newLog,
+    };
+
+    setSelectedHabit(updatedHabit);
+
     setHabits((currentHabits) =>
       currentHabits.map((habit) =>
-        habit.id === selectedHabit.id
-          ? {
-              ...habit,
-              logs: newLog,
-            }
-          : habit,
+        habit.id === updatedHabit.id ? updatedHabit : habit,
       ),
     );
 
@@ -207,6 +311,36 @@ export default function CalendarScreen() {
         <CalendarList
           key={selectedHabit?.id ?? "no-habit"}
           onDayPress={(day) => {
+            if (!selectedHabit) {
+              return;
+            }
+
+            const pressedDate = new Date(`${day.dateString}T00:00:00`);
+
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            if (pressedDate > today) {
+              Alert.alert(
+                "Future date",
+                "You cannot update a habit for a future date.",
+              );
+              return;
+            }
+            const pressedDayNumber = pressedDate.getDay();
+
+            const allowedDayNumbers = selectedHabit.repeat_days.map(
+              (repeatDay) => daysToNumber[repeatDay],
+            );
+
+            if (!allowedDayNumbers.includes(pressedDayNumber)) {
+              Alert.alert(
+                "Not a scheduled day",
+                `${selectedHabit.name} is not scheduled for this day.`,
+              );
+              return;
+            }
+
             editDate(day);
           }}
           markingType="custom"
@@ -233,7 +367,8 @@ export default function CalendarScreen() {
       </View>
 
       <View style={styles.statsContainer}>
-        <Text style={styles.statsTitle}>Streaks</Text>
+        <Text style={styles.statsTitle}>Current streak: {streak}</Text>
+        <Text style={styles.statsTitle}>Max streak: {maxStreak}</Text>
       </View>
 
       <BottomSheet
@@ -312,6 +447,13 @@ export default function CalendarScreen() {
               >
                 <Text style={styles.statusIcon}>✕</Text>
                 <Text style={styles.statusButtonText}>No, not completed</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.statusButton, styles.unlogButton]}
+                onPress={() => updateCalendar(null)}
+              >
+                <Text style={styles.statusIcon}>−</Text>
+                <Text style={styles.statusButtonText}>Remove log</Text>
               </Pressable>
             </View>
           </Pressable>
@@ -503,6 +645,9 @@ const styles = StyleSheet.create({
 
   noButton: {
     backgroundColor: "#c9342f",
+  },
+  unlogButton: {
+    backgroundColor: "#48484a",
   },
 
   statusIcon: {
