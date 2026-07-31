@@ -6,11 +6,34 @@ import BottomSheet, {
 import { User } from "@supabase/supabase-js";
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  Alert,
+  Modal,
+  Pressable,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import { CalendarList, DateData } from "react-native-calendars";
-import { SafeAreaView } from "react-native-safe-area-context";
 
-const CALENDAR_HEIGHT = 380;
+const CALENDAR_HEIGHT = 420;
+const CALENDAR_SIDE_BLEED = 8;
+
+const COLORS = {
+  background: "#000000",
+  surface: "#171717",
+  surfaceRaised: "#1D1D1F",
+  surfaceMuted: "#252527",
+  border: "#2B2B2E",
+  text: "#FFFFFF",
+  secondaryText: "#929298",
+  mutedText: "#5E5E63",
+  green: "#61D157",
+  yellow: "#E7B94F",
+  red: "#FF6259",
+  white: "#FFFFFF",
+};
 
 type CalendarHabit = {
   id: number;
@@ -30,6 +53,16 @@ const daysToNumber: Record<string, number> = {
   saturday: 6,
 };
 
+const shortDayNames: Record<string, string> = {
+  sunday: "SUN",
+  monday: "MON",
+  tuesday: "TUE",
+  wednesday: "WED",
+  thursday: "THU",
+  friday: "FRI",
+  saturday: "SAT",
+};
+
 function formatDate(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -38,7 +71,20 @@ function formatDate(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+function formatSchedule(repeatDays: string[]): string {
+  if (repeatDays.length === 7) {
+    return "EVERY DAY";
+  }
+
+  return repeatDays
+    .map((day) => shortDayNames[day] ?? day.toUpperCase())
+    .join(" · ");
+}
+
 export default function CalendarScreen() {
+  const { width: screenWidth } = useWindowDimensions();
+  const calendarWidth = screenWidth - 44 + CALENDAR_SIDE_BLEED * 2;
+
   const bottomSheetRef = useRef<BottomSheet>(null);
 
   const [user, setUser] = useState<User | null>(null);
@@ -48,6 +94,7 @@ export default function CalendarScreen() {
   );
   const [modalOpen, setModalOpen] = useState(false);
   const [currDay, setCurrDay] = useState<DateData | null>(null);
+  const [inlineMessage, setInlineMessage] = useState<string | null>(null);
 
   const { habitId } = useLocalSearchParams<{
     habitId?: string;
@@ -103,47 +150,6 @@ export default function CalendarScreen() {
       fetchHabits();
     }, [user, habitId]),
   );
-
-  //to convert data into expected format for calendar
-  const markedDates = useMemo(() => {
-    if (!selectedHabit) {
-      return {};
-    }
-
-    return Object.entries(selectedHabit.logs).reduce(
-      (result, [date, completed]) => {
-        result[date] = {
-          customStyles: {
-            container: {
-              backgroundColor: completed ? "green" : "red",
-              borderRadius: 18,
-            },
-            text: {
-              color: "white",
-              fontWeight: "bold",
-            },
-          },
-        };
-
-        return result;
-      },
-      {} as Record<
-        string,
-        {
-          customStyles: {
-            container: {
-              backgroundColor: string;
-              borderRadius: number;
-            };
-            text: {
-              color: string;
-              fontWeight: "bold";
-            };
-          };
-        }
-      >,
-    );
-  }, [selectedHabit]);
 
   const streak = useMemo(() => {
     if (!selectedHabit) {
@@ -227,12 +233,38 @@ export default function CalendarScreen() {
     return longestRun;
   }, [selectedHabit]);
 
+  const loggedDaysThisMonth = useMemo(() => {
+    if (!selectedHabit) {
+      return 0;
+    }
+
+    const now = new Date();
+    const currentMonthPrefix = `${now.getFullYear()}-${String(
+      now.getMonth() + 1,
+    ).padStart(2, "0")}`;
+
+    return Object.keys(selectedHabit.logs).filter((date) =>
+      date.startsWith(currentMonthPrefix),
+    ).length;
+  }, [selectedHabit]);
+
+  const createdDateString = useMemo(() => {
+    if (!selectedHabit) {
+      return null;
+    }
+
+    const createdDate = new Date(selectedHabit.created_at);
+    createdDate.setHours(0, 0, 0, 0);
+    return formatDate(createdDate);
+  }, [selectedHabit]);
+
   function openBottomSheet() {
     bottomSheetRef.current?.snapToIndex(0);
   }
 
   function selectHabit(habit: CalendarHabit) {
     setSelectedHabit(habit);
+    setInlineMessage(null);
     bottomSheetRef.current?.close();
   }
 
@@ -243,14 +275,56 @@ export default function CalendarScreen() {
         appearsOnIndex={0}
         disappearsOnIndex={-1}
         pressBehavior="close"
+        opacity={0.7}
       />
     ),
     [],
   );
 
   function editDate(day: DateData) {
+    setInlineMessage(null);
     setModalOpen(true);
     setCurrDay(day);
+  }
+
+  function handleDayPress(day: DateData) {
+    if (!selectedHabit) {
+      return;
+    }
+
+    const pressedDate = new Date(`${day.dateString}T00:00:00`);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const createdDate = new Date(selectedHabit.created_at);
+    createdDate.setHours(0, 0, 0, 0);
+
+    if (pressedDate > today) {
+      setInlineMessage("Future dates can’t be edited yet.");
+      return;
+    }
+
+    if (pressedDate < createdDate) {
+      setInlineMessage(
+        `This habit started on ${createdDate.toLocaleDateString("en-US", {
+          month: "long",
+          day: "numeric",
+        })}.`,
+      );
+      return;
+    }
+
+    const pressedDayNumber = pressedDate.getDay();
+    const allowedDayNumbers = selectedHabit.repeat_days.map(
+      (repeatDay) => daysToNumber[repeatDay],
+    );
+
+    if (!allowedDayNumbers.includes(pressedDayNumber)) {
+      setInlineMessage("This habit wasn’t scheduled for this day.");
+      return;
+    }
+
+    editDate(day);
   }
 
   async function updateCalendar(completed: boolean | null) {
@@ -296,79 +370,172 @@ export default function CalendarScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.screen} edges={["top"]}>
-      <View style={styles.header}>
-        <Pressable style={styles.selector} onPress={openBottomSheet}>
-          <Text style={styles.selectorText}>
+    <View style={styles.screen}>
+      <View style={styles.pageHeader}>
+        <View>
+          <Text style={styles.eyebrow}>YOUR ROUTINE</Text>
+          <Text style={styles.pageTitle}>Calendar</Text>
+        </View>
+
+        <Pressable
+          style={({ pressed }) => [
+            styles.headerHabitSelector,
+            pressed && styles.headerHabitSelectorPressed,
+          ]}
+          onPress={openBottomSheet}
+        >
+          <Text
+            style={styles.headerHabitName}
+            numberOfLines={1}
+            ellipsizeMode="tail"
+          >
             {selectedHabit?.name ?? "Select habit"}
           </Text>
-
-          <Text style={styles.arrow}>⌄</Text>
+          <Text style={styles.headerHabitChevron}>⌄</Text>
         </Pressable>
       </View>
 
-      <View style={styles.calendarContainer}>
-        <CalendarList
-          key={selectedHabit?.id ?? "no-habit"}
-          onDayPress={(day) => {
-            if (!selectedHabit) {
-              return;
-            }
+      <Text style={styles.pageSubtitle}>
+        {loggedDaysThisMonth} {loggedDaysThisMonth === 1 ? "day" : "days"}{" "}
+        logged this month
+      </Text>
 
-            const pressedDate = new Date(`${day.dateString}T00:00:00`);
+      <View style={styles.calendarCard}>
+        <View style={styles.calendarContainer}>
+          <CalendarList
+            key={selectedHabit?.id ?? "no-habit"}
+            horizontal={false}
+            pagingEnabled
+            hideExtraDays
+            current={new Date().toISOString().split("T")[0]}
+            calendarHeight={CALENDAR_HEIGHT}
+            calendarWidth={calendarWidth}
+            style={[styles.calendar, { width: calendarWidth }]}
+            dayComponent={(props) => {
+              const date = props.date;
 
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
+              if (!date) {
+                return <View style={styles.dayCell} />;
+              }
 
-            if (pressedDate > today) {
-              Alert.alert(
-                "Future date",
-                "You cannot update a habit for a future date.",
+              const dateObject = new Date(`${date.dateString}T00:00:00`);
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+
+              const createdDate = selectedHabit
+                ? new Date(selectedHabit.created_at)
+                : null;
+              createdDate?.setHours(0, 0, 0, 0);
+
+              const allowedDayNumbers =
+                selectedHabit?.repeat_days.map(
+                  (repeatDay) => daysToNumber[repeatDay],
+                ) ?? [];
+
+              const isFuture = dateObject > today;
+              const isBeforeCreation = createdDate
+                ? dateObject < createdDate
+                : false;
+              const isScheduled = allowedDayNumbers.includes(
+                dateObject.getDay(),
               );
-              return;
-            }
-            const pressedDayNumber = pressedDate.getDay();
+              const isUnavailable =
+                !selectedHabit || isFuture || isBeforeCreation || !isScheduled;
+              const isToday = dateObject.getTime() === today.getTime();
+              const completed = selectedHabit?.logs[date.dateString];
+              const isSuccess = completed === true;
+              const isIntentionalNo = completed === false;
+              const isMissed =
+                Boolean(selectedHabit) &&
+                isScheduled &&
+                !isBeforeCreation &&
+                dateObject < today &&
+                completed === undefined;
+              const isStartDate = date.dateString === createdDateString;
 
-            const allowedDayNumbers = selectedHabit.repeat_days.map(
-              (repeatDay) => daysToNumber[repeatDay],
-            );
+              return (
+                <Pressable
+                  onPress={() => handleDayPress(date)}
+                  hitSlop={4}
+                  style={({ pressed }) => [
+                    styles.dayCell,
+                    isUnavailable && styles.dayCellUnavailable,
+                    pressed && styles.dayCellPressed,
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.dayCircle,
+                      isSuccess && styles.successDay,
+                      isIntentionalNo && styles.intentionalNoDay,
+                      isMissed && styles.missedDay,
+                      isToday &&
+                        !isSuccess &&
+                        !isIntentionalNo &&
+                        !isUnavailable &&
+                        styles.todayDay,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.dayText,
+                        isSuccess && styles.successDayText,
+                        isUnavailable && styles.unavailableDayText,
+                      ]}
+                    >
+                      {date.day}
+                    </Text>
+                  </View>
 
-            if (!allowedDayNumbers.includes(pressedDayNumber)) {
-              Alert.alert(
-                "Not a scheduled day",
-                `${selectedHabit.name} is not scheduled for this day.`,
+                  {isStartDate && (
+                    <View style={styles.startTag}>
+                      <Text style={styles.startTagText}>START</Text>
+                    </View>
+                  )}
+                </Pressable>
               );
-              return;
-            }
+            }}
+            theme={{
+              calendarBackground: COLORS.surface,
+              monthTextColor: COLORS.text,
+              textMonthFontSize: 20,
+              textMonthFontWeight: "700",
+              textSectionTitleColor: COLORS.secondaryText,
+              textDayHeaderFontSize: 12,
+              textDayHeaderFontWeight: "600",
+              arrowColor: COLORS.secondaryText,
+            }}
+          />
+        </View>
+      </View>
 
-            editDate(day);
-          }}
-          markingType="custom"
-          markedDates={markedDates}
-          horizontal={false}
-          pagingEnabled
-          current={new Date().toISOString().split("T")[0]}
-          calendarHeight={CALENDAR_HEIGHT}
-          style={{ height: CALENDAR_HEIGHT }}
-          theme={{
-            calendarBackground: "#ded1d1ff",
-            monthTextColor: "#111111",
-            textMonthFontSize: 20,
-            textMonthFontWeight: "bold",
-            dayTextColor: "#111111",
-            textDayFontSize: 16,
-            textSectionTitleColor: "#777777",
-            todayTextColor: "#4f46e5",
-            selectedDayBackgroundColor: "#4f46e5",
-            selectedDayTextColor: "#ffffff",
-            arrowColor: "#4f46e5",
-          }}
-        />
+      <View style={styles.messageArea}>
+        {inlineMessage ? (
+          <View style={styles.inlineMessage}>
+            <View style={styles.messageDot} />
+            <Text style={styles.inlineMessageText}>{inlineMessage}</Text>
+          </View>
+        ) : (
+          <Text style={styles.helperText}>
+            Tap a scheduled day to update it.
+          </Text>
+        )}
       </View>
 
       <View style={styles.statsContainer}>
-        <Text style={styles.statsTitle}>Current streak: {streak}</Text>
-        <Text style={styles.statsTitle}>Max streak: {maxStreak}</Text>
+        <View style={styles.statCard}>
+          <Text style={styles.statLabel}>CURRENT</Text>
+          <Text style={styles.statValue}>{streak}</Text>
+          <Text style={styles.statCaption}>days in a row</Text>
+        </View>
+
+        <View style={styles.statCard}>
+          <Text style={styles.statLabel}>BEST</Text>
+          <Text style={[styles.statValue, styles.bestStatValue]}>
+            {maxStreak}
+          </Text>
+          <Text style={styles.statCaption}>days in a row</Text>
+        </View>
       </View>
 
       <BottomSheet
@@ -381,23 +548,45 @@ export default function CalendarScreen() {
         handleIndicatorStyle={styles.handleIndicator}
       >
         <BottomSheetView style={styles.sheetContent}>
+          <Text style={styles.sheetEyebrow}>YOUR ROUTINES</Text>
           <Text style={styles.sheetTitle}>Choose a habit</Text>
 
-          {habits.map((currentHabit) => (
-            <Pressable
-              key={currentHabit.name}
-              style={styles.option}
-              onPress={() => selectHabit(currentHabit)}
-            >
-              <Text style={styles.optionText}>{currentHabit.name}</Text>
+          <View style={styles.optionList}>
+            {habits.map((currentHabit) => {
+              const isSelected = selectedHabit?.id === currentHabit.id;
 
-              {selectedHabit?.name === currentHabit.name && (
-                <Text style={styles.check}>✓</Text>
-              )}
-            </Pressable>
-          ))}
+              return (
+                <Pressable
+                  key={currentHabit.id}
+                  style={({ pressed }) => [
+                    styles.option,
+                    isSelected && styles.selectedOption,
+                    pressed && styles.optionPressed,
+                  ]}
+                  onPress={() => selectHabit(currentHabit)}
+                >
+                  <View>
+                    <Text style={styles.optionText}>{currentHabit.name}</Text>
+                    <Text style={styles.optionSchedule}>
+                      {formatSchedule(currentHabit.repeat_days)}
+                    </Text>
+                  </View>
+
+                  <View
+                    style={[
+                      styles.optionCheckCircle,
+                      isSelected && styles.optionCheckCircleSelected,
+                    ]}
+                  >
+                    {isSelected && <Text style={styles.check}>✓</Text>}
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
         </BottomSheetView>
       </BottomSheet>
+
       <Modal visible={modalOpen} transparent animationType="fade">
         <Pressable
           style={styles.modalBackground}
@@ -411,10 +600,16 @@ export default function CalendarScreen() {
             onPress={(event) => event.stopPropagation()}
           >
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Update Habit</Text>
+              <View>
+                <Text style={styles.modalEyebrow}>DAILY CHECK-IN</Text>
+                <Text style={styles.modalTitle}>Update habit</Text>
+              </View>
 
               <Pressable
-                style={styles.closeButton}
+                style={({ pressed }) => [
+                  styles.closeButton,
+                  pressed && styles.closeButtonPressed,
+                ]}
                 onPress={() => {
                   setModalOpen(false);
                   setCurrDay(null);
@@ -432,91 +627,305 @@ export default function CalendarScreen() {
               this day?
             </Text>
 
-            <View style={styles.modalButtons}>
+            <View style={styles.primaryModalButtons}>
               <Pressable
-                style={[styles.statusButton, styles.yesButton]}
+                style={({ pressed }) => [
+                  styles.statusButton,
+                  styles.yesButton,
+                  pressed && styles.statusButtonPressed,
+                ]}
                 onPress={() => updateCalendar(true)}
               >
-                <Text style={styles.statusIcon}>✓</Text>
-                <Text style={styles.statusButtonText}>Yes, completed</Text>
+                <Text style={styles.yesButtonIcon}>✓</Text>
+                <Text style={styles.yesButtonText}>Done</Text>
               </Pressable>
 
               <Pressable
-                style={[styles.statusButton, styles.noButton]}
+                style={({ pressed }) => [
+                  styles.statusButton,
+                  styles.noButton,
+                  pressed && styles.statusButtonPressed,
+                ]}
                 onPress={() => updateCalendar(false)}
               >
-                <Text style={styles.statusIcon}>✕</Text>
-                <Text style={styles.statusButtonText}>No, not completed</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.statusButton, styles.unlogButton]}
-                onPress={() => updateCalendar(null)}
-              >
-                <Text style={styles.statusIcon}>−</Text>
-                <Text style={styles.statusButtonText}>Remove log</Text>
+                <Text style={styles.noButtonIcon}>✕</Text>
+                <Text style={styles.noButtonText}>No</Text>
               </Pressable>
             </View>
+
+            <Pressable
+              style={({ pressed }) => [
+                styles.unlogButton,
+                pressed && styles.statusButtonPressed,
+              ]}
+              onPress={() => updateCalendar(null)}
+            >
+              <Text style={styles.unlogButtonText}>Remove existing log</Text>
+            </Pressable>
           </Pressable>
         </Pressable>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#000000",
+    backgroundColor: COLORS.background,
+    paddingHorizontal: 22,
+    paddingTop: 66,
   },
 
-  header: {
-    height: 70,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 16,
-  },
-
-  selector: {
+  pageHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    justifyContent: "space-between",
+  },
+
+  eyebrow: {
+    color: COLORS.secondaryText,
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 1.8,
+    marginBottom: 7,
+  },
+
+  pageTitle: {
+    color: COLORS.text,
+    fontSize: 34,
+    lineHeight: 40,
+    fontWeight: "800",
+    letterSpacing: -1.1,
+  },
+
+  pageSubtitle: {
+    marginTop: 8,
+    marginBottom: 18,
+    color: COLORS.secondaryText,
+    fontSize: 15,
+  },
+
+  headerHabitSelector: {
+    maxWidth: 190,
+    minWidth: 118,
+    minHeight: 48,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    backgroundColor: COLORS.surface,
+    borderRadius: 24,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: COLORS.border,
   },
 
-  selectorText: {
-    color: "#ffffff",
-    fontSize: 22,
-    fontWeight: "600",
+  headerHabitSelectorPressed: {
+    opacity: 0.72,
+    transform: [{ scale: 0.98 }],
   },
 
-  arrow: {
-    color: "#ffffff",
+  headerHabitName: {
+    flexShrink: 1,
+    color: COLORS.text,
     fontSize: 18,
+    fontWeight: "700",
+  },
+
+  headerHabitChevron: {
+    marginTop: -3,
+    color: COLORS.secondaryText,
+    fontSize: 18,
+    fontWeight: "700",
+  },
+
+  calendarCard: {
+    marginHorizontal: -CALENDAR_SIDE_BLEED,
+    overflow: "hidden",
+    backgroundColor: COLORS.surface,
+    borderRadius: 28,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: COLORS.border,
   },
 
   calendarContainer: {
     height: CALENDAR_HEIGHT,
+    width: "100%",
+    alignItems: "center",
   },
 
-  statsContainer: {
-    flex: 1,
-    paddingHorizontal: 16,
-    paddingTop: 20,
+  calendar: {
+    height: CALENDAR_HEIGHT,
+    alignSelf: "center",
+    backgroundColor: COLORS.surface,
   },
 
-  statsTitle: {
-    color: "#ffffff",
-    fontSize: 18,
+  dayCell: {
+    width: 42,
+    height: 42,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  dayCellUnavailable: {
+    opacity: 0.32,
+  },
+
+  dayCellPressed: {
+    opacity: 0.65,
+    transform: [{ scale: 0.94 }],
+  },
+
+  dayCircle: {
+    width: 36,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: "transparent",
+  },
+
+  dayText: {
+    color: COLORS.secondaryText,
+    fontSize: 15,
     fontWeight: "600",
   },
 
+  unavailableDayText: {
+    color: COLORS.mutedText,
+  },
+
+  successDay: {
+    backgroundColor: COLORS.white,
+    borderColor: COLORS.white,
+    shadowColor: COLORS.white,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.75,
+    shadowRadius: 9,
+    elevation: 7,
+  },
+
+  successDayText: {
+    color: COLORS.background,
+    fontWeight: "800",
+  },
+
+  intentionalNoDay: {
+    borderColor: COLORS.red,
+  },
+
+  missedDay: {
+    borderColor: COLORS.yellow,
+  },
+
+  todayDay: {
+    borderColor: COLORS.green,
+  },
+
+  startTag: {
+    position: "absolute",
+    top: -4,
+    right: -8,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    backgroundColor: COLORS.green,
+    borderRadius: 4,
+    transform: [{ rotate: "-12deg" }],
+  },
+
+  startTagText: {
+    color: COLORS.background,
+    fontSize: 6,
+    fontWeight: "900",
+    letterSpacing: 0.5,
+  },
+
+  messageArea: {
+    minHeight: 42,
+    justifyContent: "center",
+    paddingHorizontal: 4,
+  },
+
+  inlineMessage: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+
+  messageDot: {
+    width: 5,
+    height: 5,
+    backgroundColor: COLORS.secondaryText,
+    borderRadius: 3,
+  },
+
+  inlineMessageText: {
+    flex: 1,
+    color: COLORS.secondaryText,
+    fontSize: 13,
+    fontWeight: "500",
+  },
+
+  helperText: {
+    color: COLORS.mutedText,
+    fontSize: 12,
+    fontWeight: "500",
+  },
+
+  statsContainer: {
+    flexDirection: "row",
+    marginTop: 8,
+    gap: 12,
+  },
+
+  statCard: {
+    flex: 1,
+    minHeight: 124,
+    justifyContent: "center",
+    paddingHorizontal: 20,
+    backgroundColor: COLORS.surface,
+    borderRadius: 24,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: COLORS.border,
+  },
+
+  statLabel: {
+    color: COLORS.secondaryText,
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 2.4,
+  },
+
+  statValue: {
+    marginTop: 8,
+    color: COLORS.text,
+    fontSize: 38,
+    lineHeight: 42,
+    fontWeight: "800",
+  },
+
+  bestStatValue: {
+    color: COLORS.green,
+  },
+
+  statCaption: {
+    marginTop: 2,
+    color: COLORS.secondaryText,
+    fontSize: 13,
+    fontWeight: "500",
+  },
+
   sheetBackground: {
-    backgroundColor: "#1c1c1e",
+    backgroundColor: COLORS.surfaceRaised,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
   },
 
   handleIndicator: {
-    backgroundColor: "#8e8e93",
+    width: 42,
+    backgroundColor: COLORS.mutedText,
   },
 
   sheetContent: {
@@ -524,54 +933,100 @@ const styles = StyleSheet.create({
     paddingBottom: 30,
   },
 
+  sheetEyebrow: {
+    color: COLORS.secondaryText,
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 2.3,
+  },
+
   sheetTitle: {
-    color: "#ffffff",
-    fontSize: 20,
-    fontWeight: "600",
-    marginBottom: 12,
+    marginTop: 6,
+    marginBottom: 18,
+    color: COLORS.text,
+    fontSize: 28,
+    fontWeight: "800",
+    letterSpacing: -0.7,
+  },
+
+  optionList: {
+    gap: 10,
   },
 
   option: {
-    height: 60,
+    minHeight: 70,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#3a3a3c",
+    paddingHorizontal: 16,
+    backgroundColor: COLORS.surface,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+
+  selectedOption: {
+    borderColor: COLORS.green,
+  },
+
+  optionPressed: {
+    opacity: 0.72,
   },
 
   optionText: {
-    color: "#ffffff",
-    fontSize: 18,
+    color: COLORS.text,
+    fontSize: 17,
+    fontWeight: "700",
+  },
+
+  optionSchedule: {
+    marginTop: 4,
+    color: COLORS.secondaryText,
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 1.5,
+  },
+
+  optionCheckCircle: {
+    width: 28,
+    height: 28,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: COLORS.surfaceMuted,
+    borderRadius: 14,
+  },
+
+  optionCheckCircleSelected: {
+    backgroundColor: COLORS.green,
   },
 
   check: {
-    color: "#0a84ff",
-    fontSize: 20,
-    fontWeight: "700",
+    color: COLORS.background,
+    fontSize: 15,
+    fontWeight: "900",
   },
+
   modalBackground: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    paddingHorizontal: 24,
-    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    paddingHorizontal: 22,
+    backgroundColor: "rgba(0, 0, 0, 0.78)",
   },
 
   modalBox: {
     width: "100%",
     maxWidth: 400,
     padding: 22,
-    backgroundColor: "#1c1c1e",
-    borderRadius: 22,
-    shadowColor: "#000000",
-    shadowOffset: {
-      width: 0,
-      height: 10,
-    },
-    shadowOpacity: 0.35,
-    shadowRadius: 20,
-    elevation: 10,
+    backgroundColor: COLORS.surfaceRaised,
+    borderRadius: 28,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: COLORS.border,
+    shadowColor: COLORS.background,
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.45,
+    shadowRadius: 24,
+    elevation: 12,
   },
 
   modalHeader: {
@@ -580,98 +1035,131 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
 
-  modalTitle: {
-    color: "#ffffff",
-    fontSize: 22,
+  modalEyebrow: {
+    color: COLORS.secondaryText,
+    fontSize: 10,
     fontWeight: "700",
+    letterSpacing: 2.2,
+  },
+
+  modalTitle: {
+    marginTop: 5,
+    color: COLORS.text,
+    fontSize: 26,
+    fontWeight: "800",
+    letterSpacing: -0.6,
   },
 
   closeButton: {
-    width: 32,
-    height: 32,
+    width: 36,
+    height: 36,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#2c2c2e",
-    borderRadius: 16,
+    backgroundColor: COLORS.surfaceMuted,
+    borderRadius: 18,
+  },
+
+  closeButtonPressed: {
+    opacity: 0.65,
   },
 
   closeButtonText: {
-    color: "#8e8e93",
-    fontSize: 15,
-    fontWeight: "700",
+    color: COLORS.secondaryText,
+    fontSize: 14,
+    fontWeight: "800",
   },
 
   modalDate: {
     alignSelf: "flex-start",
-    marginTop: 12,
+    marginTop: 18,
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    color: "#0a84ff",
-    fontSize: 14,
-    fontWeight: "600",
-    backgroundColor: "rgba(10, 132, 255, 0.15)",
+    paddingVertical: 7,
+    color: COLORS.green,
+    fontSize: 13,
+    fontWeight: "700",
+    backgroundColor: "rgba(97, 209, 87, 0.12)",
     borderRadius: 10,
   },
 
   modalQuestion: {
-    marginTop: 20,
-    color: "#d1d1d6",
+    marginTop: 18,
+    color: COLORS.secondaryText,
     fontSize: 17,
-    lineHeight: 24,
+    lineHeight: 25,
   },
 
   habitName: {
-    color: "#ffffff",
-    fontWeight: "700",
+    color: COLORS.text,
+    fontWeight: "800",
   },
 
-  modalButtons: {
-    gap: 12,
+  primaryModalButtons: {
+    flexDirection: "row",
+    gap: 10,
     marginTop: 24,
   },
 
   statusButton: {
-    minHeight: 58,
-    flexDirection: "row",
+    flex: 1,
+    minHeight: 62,
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
-    borderRadius: 14,
+    gap: 4,
+    borderRadius: 18,
+    borderWidth: 1.5,
+  },
+
+  statusButtonPressed: {
+    opacity: 0.7,
+    transform: [{ scale: 0.98 }],
   },
 
   yesButton: {
-    backgroundColor: "#248a3d",
+    backgroundColor: COLORS.white,
+    borderColor: COLORS.white,
+  },
+
+  yesButtonIcon: {
+    color: COLORS.background,
+    fontSize: 17,
+    fontWeight: "900",
+  },
+
+  yesButtonText: {
+    color: COLORS.background,
+    fontSize: 15,
+    fontWeight: "800",
   },
 
   noButton: {
-    backgroundColor: "#c9342f",
-  },
-  unlogButton: {
-    backgroundColor: "#48484a",
+    backgroundColor: "transparent",
+    borderColor: COLORS.red,
   },
 
-  statusIcon: {
-    color: "#ffffff",
-    fontSize: 18,
-    fontWeight: "700",
-  },
-
-  statusButtonText: {
-    color: "#ffffff",
-    fontSize: 17,
-    fontWeight: "600",
-  },
-
-  cancelButton: {
-    height: 48,
-    justifyContent: "center",
-    alignItems: "center",
-    marginTop: 12,
-  },
-
-  cancelButtonText: {
-    color: "#8e8e93",
+  noButtonIcon: {
+    color: COLORS.red,
     fontSize: 16,
-    fontWeight: "600",
+    fontWeight: "900",
+  },
+
+  noButtonText: {
+    color: COLORS.red,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+
+  unlogButton: {
+    minHeight: 48,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 10,
+    backgroundColor: COLORS.surfaceMuted,
+    borderRadius: 15,
+  },
+
+  unlogButtonText: {
+    color: COLORS.secondaryText,
+    fontSize: 14,
+    fontWeight: "700",
   },
 });

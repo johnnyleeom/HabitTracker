@@ -13,11 +13,9 @@ export default function RootLayout() {
   return (
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
       <Stack
-      // screenOptions={{
-      //   headerTransparent: true,
-      //   headerTitle: "",
-      //   headerShadowVisible: false,
-      // }}
+        screenOptions={{
+          headerShown: false,
+        }}
       ></Stack>
     </ThemeProvider>
   );
