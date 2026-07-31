@@ -2,22 +2,62 @@ import { supabase } from "@/utils/supabase";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import type { User } from "@supabase/supabase-js";
 import * as Haptics from "expo-haptics";
+import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Modal,
+  PlatformColor,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  useColorScheme,
   View,
 } from "react-native";
+import {
+  GestureHandlerRootView,
+  Swipeable,
+} from "react-native-gesture-handler";
 import { NewHabit, StoredHabit } from "../types/habit";
 import { Day, days } from "../types/notificationFreq";
 
+// Visible-card layout: exactly 3 full cards fit, a 4th peeks in and fades.
+const CARD_GAP = 14;
+const VISIBLE_CARDS = 3;
+const PEEK_RATIO = 0.32; // portion of a 4th card that peeks before fading
+const FALLBACK_CARD_HEIGHT = 108;
+
+const ACCENT = "#34C759";
+const DANGER = "#FF3B30";
+
+function getTheme(isDark: boolean) {
+  return {
+    screen: PlatformColor("systemBackground"),
+    elevated: PlatformColor("secondarySystemBackground"),
+    card: PlatformColor("secondarySystemBackground"),
+    field: PlatformColor("tertiarySystemBackground"),
+    text: PlatformColor("label"),
+    secondaryText: PlatformColor("secondaryLabel"),
+    tertiaryText: PlatformColor("tertiaryLabel"),
+    border: PlatformColor("separator"),
+    buttonBackground: PlatformColor("label"),
+    buttonText: PlatformColor("systemBackground"),
+    overlay: isDark ? "rgba(0, 0, 0, 0.72)" : "rgba(0, 0, 0, 0.35)",
+    fadeEnd: isDark ? "rgba(0, 0, 0, 1)" : "rgba(255, 255, 255, 1)",
+    disabled: PlatformColor("systemGray4"),
+    dotInactive: isDark ? "rgba(255,255,255,0.12)" : "rgba(60,60,67,0.18)",
+  };
+}
+
 export default function HomeScreen() {
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === "dark";
+  const theme = useMemo(() => getTheme(isDark), [isDark]);
+  const styles = useMemo(() => createStyles(theme), [theme]);
+
   const [habits, setHabits] = useState<StoredHabit[]>([]);
   const [habitName, setHabitName] = useState("");
   const [isModalVisible, setIsModalVisible] = useState(false);
@@ -26,33 +66,55 @@ export default function HomeScreen() {
     new Date(2026, 0, 1, 23, 59),
   );
   const [selectedDays, setSelectedDays] = useState<Day[]>([]);
+  const [listHeight, setListHeight] = useState(0);
+
   const isAddHabitButtonDisabled =
     habitName.trim() === "" || selectedDays.length === 0;
 
-  //retreving user id
+  // Size cards so exactly 3 fill the available space, with a 4th peeking in.
+  // Recomputed from the actual measured container height, so it adapts to
+  // any screen size instead of guessing at a fixed constant.
+  const cardHeight =
+    listHeight > 0
+      ? (listHeight - CARD_GAP * (VISIBLE_CARDS - 1)) /
+        (VISIBLE_CARDS + PEEK_RATIO)
+      : FALLBACK_CARD_HEIGHT;
+  const peekHeight = cardHeight * PEEK_RATIO;
+
+  const needsScroll = habits.length > 3;
+
+  // Track open swipe rows so opening one closes any others.
+  const swipeableRefs = useRef(new Map<number, Swipeable | null>()).current;
+
+  function closeOtherSwipeables(exceptId: number) {
+    swipeableRefs.forEach((ref, id) => {
+      if (id !== exceptId) {
+        ref?.close();
+      }
+    });
+  }
+
   useEffect(() => {
     async function fetchUser() {
       const {
         data: { user },
-        error: userError,
+        error,
       } = await supabase.auth.getUser();
 
-      if (userError) {
-        console.log(userError.message);
+      if (error) {
+        Alert.alert("Unable to load your account", error.message);
         return;
       }
 
       setUser(user);
     }
 
-    fetchUser();
+    void fetchUser();
   }, []);
 
-  //retrieving user data. like habits
   useEffect(() => {
     async function fetchHabits() {
       if (!user) {
-        console.log("no user logged in");
         return;
       }
 
@@ -63,17 +125,16 @@ export default function HomeScreen() {
         .order("created_at", { ascending: true });
 
       if (error) {
-        Alert.alert("Cannot retrieve data from database", error.message);
+        Alert.alert("Cannot retrieve habits", error.message);
         return;
       }
 
-      setHabits(data);
+      setHabits(data ?? []);
     }
 
-    fetchHabits();
+    void fetchHabits();
   }, [user]);
 
-  //Helper functions start
   function formatTimeForSupabase(date: Date): string {
     const hours = date.getHours().toString().padStart(2, "0");
     const minutes = date.getMinutes().toString().padStart(2, "0");
@@ -82,36 +143,76 @@ export default function HomeScreen() {
     return `${hours}:${minutes}:${seconds}`;
   }
 
+  function formatNotificationTime(value: string | null | undefined) {
+    if (!value) {
+      return "No reminder";
+    }
+
+    const [hourString, minuteString] = value.split(":");
+    const hour = Number(hourString);
+    const minute = Number(minuteString);
+
+    if (Number.isNaN(hour) || Number.isNaN(minute)) {
+      return "Reminder set";
+    }
+
+    const date = new Date();
+    date.setHours(hour, minute, 0, 0);
+
+    return date.toLocaleTimeString([], {
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  }
+
+  function formatRepeatDays(repeatDays: string[] | null | undefined) {
+    if (!repeatDays || repeatDays.length === 0) {
+      return "No scheduled days";
+    }
+
+    if (repeatDays.length === 7) {
+      return "Every day";
+    }
+
+    return repeatDays.map((day) => day.slice(0, 3)).join(", ");
+  }
+
+  function formatScheduleLine(habit: StoredHabit) {
+    const schedule = formatRepeatDays(habit.repeat_days);
+    const time = formatNotificationTime(habit.notification_time);
+
+    return `${schedule} • ${time}`;
+  }
+
+  /**
+   * Placeholder until real streak tracking exists (e.g. a completions table
+   * or a `current_streak` column). index.tsx has no visibility into that
+   * data yet, so this always renders 0 rather than guessing. Swap the body
+   * of this function out once that data is available — the badge UI below
+   * doesn't need to change, just this calculation.
+   */
+  function getHabitStreak(habit: StoredHabit): number {
+    return (
+      (habit as StoredHabit & { current_streak?: number }).current_streak ?? 0
+    );
+  }
+
   function resetHabitForm() {
     setHabitName("");
     setNotificationTime(new Date(2026, 0, 1, 23, 59));
     setSelectedDays([]);
     setIsModalVisible(false);
   }
-  //helper function ends
 
   async function handleAddHabit() {
-    if (!user) {
-      console.log("No user is logged In");
+    if (!user || isAddHabitButtonDisabled) {
       return;
     }
-
-    const trimmedHabitName = habitName.trim();
-
-    if (trimmedHabitName === "") {
-      return;
-    }
-
-    if (selectedDays.length === 0) {
-      return;
-    }
-
-    const supabaseFormatDate = formatTimeForSupabase(notificationTime);
 
     const newHabit: NewHabit = {
-      name: trimmedHabitName,
+      name: habitName.trim(),
       user_id: user.id,
-      notification_time: supabaseFormatDate,
+      notification_time: formatTimeForSupabase(notificationTime),
       notification_enabled: true,
       repeat_days: selectedDays,
     };
@@ -123,18 +224,16 @@ export default function HomeScreen() {
       .single();
 
     if (error) {
-      Alert.alert(error.message);
+      Alert.alert("Unable to add habit", error.message);
       return;
     }
 
+    setHabits((currentHabits) => [...currentHabits, data]);
     resetHabitForm();
-
-    setHabits((prevHabits) => [...prevHabits, data]);
   }
 
   async function deleteHabitFromDB(habitId: number) {
     if (!user) {
-      console.log("no user signed in");
       return;
     }
 
@@ -145,311 +244,677 @@ export default function HomeScreen() {
       .eq("user_id", user.id);
 
     if (error) {
-      Alert.alert(error.message);
+      Alert.alert("Unable to delete habit", error.message);
       return;
     }
 
-    setHabits((prevHabits) =>
-      prevHabits.filter((habit) => habit.id !== habitId),
+    swipeableRefs.delete(habitId);
+
+    setHabits((currentHabits) =>
+      currentHabits.filter((habit) => habit.id !== habitId),
     );
   }
 
+  function handleSwipeDelete(habitId: number) {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    void deleteHabitFromDB(habitId);
+  }
+
   function handleDeleteHabit(id: number) {
-    Alert.alert("Delete Habit?", "Deleted habit cannot be restored.", [
+    Alert.alert("Delete habit?", "This habit cannot be restored.", [
       { text: "Cancel", style: "cancel" },
       {
         text: "Delete",
         style: "destructive",
-        onPress: () => {
-          void deleteHabitFromDB(id);
-        },
+        onPress: () => void deleteHabitFromDB(id),
       },
     ]);
   }
 
   function toggleDay(day: Day) {
-    setSelectedDays((prevDays) => {
-      if (prevDays.includes(day)) {
-        return prevDays.filter((selectedDay) => selectedDay !== day);
-      }
-
-      return [...prevDays, day];
-    });
+    setSelectedDays((currentDays) =>
+      currentDays.includes(day)
+        ? currentDays.filter((selectedDay) => selectedDay !== day)
+        : [...currentDays, day],
+    );
   }
 
   return (
-    <View style={styles.container}>
-      {/* Screen title */}
-      <Text style={styles.title}>Habit Tracker</Text>
+    <GestureHandlerRootView style={styles.gestureRoot}>
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.eyebrow}>YOUR ROUTINE</Text>
+            <Text style={styles.title}>Habit Tracker</Text>
+          </View>
 
-      {/* Habit display area */}
-      <ScrollView
-        style={styles.habitContainer}
-        contentContainerStyle={styles.habitContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {habits.length === 0 ? (
-          <Text style={styles.emptyText}>No habits yet</Text>
-        ) : (
-          habits.map((habit) => (
-            <Pressable
-              key={habit.id}
-              style={styles.habitCard}
-              onLongPress={() => {
-                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-                handleDeleteHabit(habit.id);
-              }}
-              onPress={() => {
-                router.navigate({
-                  pathname: "/(app)/calendar",
-                  params: {
-                    habitId: habit.id.toString(),
-                  },
-                });
-              }}
-              delayLongPress={500}
-            >
-              <Text style={styles.habitName}>{habit.name}</Text>
-            </Pressable>
-          ))
-        )}
-      </ScrollView>
+          <View style={styles.habitCountBadge}>
+            <Text style={styles.habitCountText}>{habits.length}</Text>
+          </View>
+        </View>
 
-      {/* Add habit button */}
-      <Pressable
-        style={[
-          styles.addHabitButton,
-          {
-            bottom: 20,
-          },
-        ]}
-        onPress={() => setIsModalVisible(true)}
-      >
-        <Text style={styles.addHabitButtonText}>+ Add Habit</Text>
-      </Pressable>
+        <Text style={styles.subtitle}>
+          {habits.length === 0
+            ? "Start with one habit worth keeping."
+            : `${habits.length} habit${habits.length === 1 ? "" : "s"} in motion`}
+        </Text>
 
-      {/* Add habit modal */}
-      <Modal
-        visible={isModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={resetHabitForm}
-      >
-        <Pressable style={styles.modalBackground} onPress={resetHabitForm}>
-          <Pressable
-            style={styles.modalBox}
-            onPress={(event) => event.stopPropagation()}
+        <View
+          style={styles.habitContainer}
+          onLayout={(event) => setListHeight(event.nativeEvent.layout.height)}
+        >
+          <ScrollView
+            contentContainerStyle={[
+              styles.habitContent,
+              { paddingBottom: habits.length > 3 ? peekHeight : 0 },
+            ]}
+            showsVerticalScrollIndicator={false}
+            bounces
+            scrollEnabled
           >
-            <Text style={styles.modalTitle}>Add Habit</Text>
-
-            <TextInput
-              style={styles.input}
-              placeholder="Habit name"
-              placeholderTextColor="#a1a1a6"
-              value={habitName}
-              onChangeText={setHabitName}
-            />
-
-            <Text style={styles.modalTitle}>Reminder Time </Text>
-
-            <DateTimePicker
-              value={notificationTime}
-              mode="time"
-              display="spinner"
-              textColor="black"
-              onChange={(_, selectedTime) => {
-                if (selectedTime) {
-                  setNotificationTime(selectedTime);
-                }
-              }}
-            />
-
-            <Text style={styles.modalTitle}>Frequency</Text>
-            <View style={styles.daysContainer}>
-              {days.map((day) => {
-                const isSelected = selectedDays.includes(day.value);
-
-                return (
-                  <Pressable
-                    key={day.value}
-                    style={[
-                      styles.dayButton,
-                      isSelected && styles.selectedDayButton,
-                    ]}
-                    onPress={() => toggleDay(day.value)}
-                  >
-                    <Text
+            {habits.length === 0 ? (
+              <View style={[styles.emptyState, { minHeight: listHeight }]}>
+                <View style={styles.emptyIcon}>
+                  <Text style={styles.emptyIconText}>+</Text>
+                </View>
+                <Text style={styles.emptyTitle}>No habits yet</Text>
+                <Text style={styles.emptyText}>
+                  Add your first habit and build a routine one day at a time.
+                </Text>
+              </View>
+            ) : (
+              habits.map((habit) => (
+                <Swipeable
+                  key={habit.id}
+                  ref={(ref) => {
+                    if (ref) {
+                      swipeableRefs.set(habit.id, ref);
+                    } else {
+                      swipeableRefs.delete(habit.id);
+                    }
+                  }}
+                  containerStyle={[
+                    styles.swipeableContainer,
+                    { height: cardHeight },
+                  ]}
+                  overshootRight={false}
+                  friction={2}
+                  rightThreshold={40}
+                  onSwipeableWillOpen={() => closeOtherSwipeables(habit.id)}
+                  renderRightActions={() => (
+                    <View
                       style={[
-                        styles.dayText,
-                        isSelected && styles.selectedDayText,
+                        styles.deleteActionContainer,
+                        { height: cardHeight },
                       ]}
                     >
-                      {day.label}
+                      <Pressable
+                        style={({ pressed }) => [
+                          styles.deleteCircle,
+                          pressed && styles.deleteCirclePressed,
+                        ]}
+                        onPress={() => handleSwipeDelete(habit.id)}
+                      >
+                        <Text style={styles.deleteIcon}>×</Text>
+                      </Pressable>
+                    </View>
+                  )}
+                >
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.habitCard,
+                      { height: cardHeight },
+                      pressed && styles.habitCardPressed,
+                    ]}
+                    onLongPress={() => {
+                      void Haptics.impactAsync(
+                        Haptics.ImpactFeedbackStyle.Heavy,
+                      );
+                      handleDeleteHabit(habit.id);
+                    }}
+                    onPress={() => {
+                      router.navigate({
+                        pathname: "/(app)/calendar",
+                        params: { habitId: habit.id.toString() },
+                      });
+                    }}
+                    delayLongPress={500}
+                  >
+                    <View style={styles.cardTopRow}>
+                      <Text style={styles.habitName} numberOfLines={1}>
+                        {habit.name}
+                      </Text>
+
+                      <View style={styles.streakBadge}>
+                        <Text style={styles.streakBadgeText}>
+                          {getHabitStreak(habit)}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <Text style={styles.habitSchedule} numberOfLines={1}>
+                      {formatScheduleLine(habit)}
                     </Text>
+
+                    <View style={styles.dotsRow}>
+                      {days.map((day) => {
+                        const isActive = (habit.repeat_days ?? []).includes(
+                          day.value,
+                        );
+
+                        return (
+                          <View
+                            key={day.value}
+                            style={[
+                              styles.dot,
+                              isActive ? styles.dotActive : styles.dotInactive,
+                            ]}
+                          />
+                        );
+                      })}
+                    </View>
                   </Pressable>
-                );
-              })}
-            </View>
-            {/* ADD BUTTON */}
-            <Pressable
-              style={[
-                styles.addButton,
-                isAddHabitButtonDisabled && styles.disabledAddButton,
-              ]}
-              onPress={handleAddHabit}
-              disabled={isAddHabitButtonDisabled}
-            >
-              <Text
-                style={[
-                  styles.addButtonText,
-                  isAddHabitButtonDisabled && styles.disabledAddButtonText,
-                ]}
-              >
-                Add
-              </Text>
-            </Pressable>
-            {/* ADD BUTTON END */}
-          </Pressable>
+                </Swipeable>
+              ))
+            )}
+          </ScrollView>
+
+          {needsScroll && (
+            <LinearGradient
+              colors={["transparent", theme.fadeEnd]}
+              style={[styles.fadeOverlay, { height: peekHeight + CARD_GAP }]}
+              pointerEvents="none"
+            />
+          )}
+        </View>
+
+        <Pressable
+          style={({ pressed }) => [
+            styles.addHabitButton,
+            pressed && styles.addHabitButtonPressed,
+          ]}
+          onPress={() => setIsModalVisible(true)}
+        >
+          <Text style={styles.addHabitPlus}>+</Text>
+          <Text style={styles.addHabitButtonText}>Add Habit</Text>
         </Pressable>
-      </Modal>
-    </View>
+
+        <Modal
+          visible={isModalVisible}
+          transparent
+          animationType="slide"
+          onRequestClose={resetHabitForm}
+        >
+          <Pressable style={styles.modalBackground} onPress={resetHabitForm}>
+            <Pressable
+              style={styles.modalBox}
+              onPress={(event) => event.stopPropagation()}
+            >
+              <View style={styles.modalHandle} />
+
+              <Text style={styles.modalTitle}>Create a habit</Text>
+
+              <Text style={styles.modalLabel}>NAME</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. Read for 20 minutes"
+                placeholderTextColor={theme.tertiaryText}
+                value={habitName}
+                onChangeText={setHabitName}
+              />
+
+              <Text style={styles.modalLabel}>REMINDER TIME</Text>
+              <DateTimePicker
+                value={notificationTime}
+                mode="time"
+                display="spinner"
+                themeVariant={isDark ? "dark" : "light"}
+                onChange={(_, selectedTime) => {
+                  if (selectedTime) {
+                    setNotificationTime(selectedTime);
+                  }
+                }}
+              />
+
+              <Text style={styles.modalLabel}>FREQUENCY</Text>
+              <View style={styles.daysContainer}>
+                {days.map((day) => {
+                  const isSelected = selectedDays.includes(day.value);
+
+                  return (
+                    <Pressable
+                      key={day.value}
+                      style={[styles.dayButton]}
+                      onPress={() => toggleDay(day.value)}
+                    >
+                      <Text
+                        style={[
+                          styles.dayText,
+                          isSelected && styles.selectedDayText,
+                        ]}
+                      >
+                        {day.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              <Pressable
+                style={[
+                  styles.addButton,
+                  isAddHabitButtonDisabled && styles.disabledAddButton,
+                ]}
+                onPress={() => void handleAddHabit()}
+                disabled={isAddHabitButtonDisabled}
+              >
+                <Text
+                  style={[
+                    styles.addButtonText,
+                    isAddHabitButtonDisabled && styles.disabledAddButtonText,
+                  ]}
+                >
+                  Add Habit
+                </Text>
+              </Pressable>
+            </Pressable>
+          </Pressable>
+        </Modal>
+      </View>
+    </GestureHandlerRootView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    paddingHorizontal: 24,
-    paddingTop: 60,
-  },
+type Theme = ReturnType<typeof getTheme>;
 
-  title: {
-    color: "white",
-    fontSize: 28,
-    fontWeight: "bold",
-    textAlign: "center",
-  },
+function createStyles(theme: Theme) {
+  return StyleSheet.create({
+    gestureRoot: {
+      flex: 1,
+    },
 
-  habitContainer: {
-    flex: 1,
-    marginTop: 30,
-    marginBottom: 100,
-  },
+    container: {
+      flex: 1,
+      backgroundColor: theme.screen,
+      paddingHorizontal: 22,
+      paddingTop: 66,
+    },
 
-  habitContent: {
-    paddingBottom: 20,
-  },
+    header: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
 
-  emptyText: {
-    color: "#a1a1a6",
-    textAlign: "center",
-    marginTop: 40,
-  },
+    eyebrow: {
+      color: theme.secondaryText,
+      fontSize: 11,
+      fontWeight: "800",
+      letterSpacing: 1.8,
+      marginBottom: 7,
+    },
 
-  habitCard: {
-    backgroundColor: "#242424",
-    padding: 18,
-    borderRadius: 12,
-    marginBottom: 12,
-  },
+    title: {
+      color: theme.text,
+      fontSize: 34,
+      fontWeight: "800",
+      letterSpacing: -1.1,
+    },
 
-  habitName: {
-    color: "white",
-    fontSize: 18,
-  },
+    subtitle: {
+      color: theme.secondaryText,
+      fontSize: 15,
+      marginTop: 8,
+      marginBottom: 18,
+    },
 
-  addHabitButton: {
-    position: "absolute",
-    alignSelf: "center",
-    backgroundColor: "white",
-    paddingHorizontal: 28,
-    paddingVertical: 14,
-    borderRadius: 30,
-  },
+    habitCountBadge: {
+      width: 42,
+      height: 42,
+      borderRadius: 21,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: theme.elevated,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: theme.border,
+    },
 
-  addHabitButtonText: {
-    color: "black",
-    fontSize: 16,
-    fontWeight: "600",
-  },
+    habitCountText: {
+      color: theme.text,
+      fontSize: 16,
+      fontWeight: "700",
+    },
 
-  modalBackground: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-  },
+    // flex: 1 (not a fixed height) so the list always fills whatever space
+    // is actually available between the header and the Add Habit button.
+    habitContainer: {
+      flex: 1,
+      position: "relative",
+      marginBottom: 96,
+    },
 
-  modalBox: {
-    width: "80%",
-    padding: 20,
-    backgroundColor: "white",
-    borderRadius: 12,
-  },
+    habitContent: {
+      flexGrow: 1,
+    },
 
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    marginBottom: 16,
-  },
+    emptyState: {
+      alignItems: "center",
+      justifyContent: "center",
+      paddingHorizontal: 38,
+    },
 
-  input: {
-    borderWidth: 1,
-    borderColor: "#cccccc",
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 16,
-    color: "black",
-  },
+    emptyIcon: {
+      width: 58,
+      height: 58,
+      borderRadius: 29,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: theme.elevated,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: theme.border,
+      marginBottom: 18,
+    },
 
-  daysContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 10,
-  },
+    emptyIconText: {
+      color: theme.text,
+      fontSize: 30,
+      fontWeight: "300",
+      marginTop: -2,
+    },
 
-  dayButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: "#A0A0A0",
-    alignItems: "center",
-    justifyContent: "center",
-  },
+    emptyTitle: {
+      color: theme.text,
+      fontSize: 20,
+      fontWeight: "700",
+      marginBottom: 8,
+    },
 
-  selectedDayButton: {
-    backgroundColor: "#6C63FF",
-    borderColor: "#6C63FF",
-  },
+    emptyText: {
+      color: theme.secondaryText,
+      fontSize: 14,
+      lineHeight: 21,
+      textAlign: "center",
+    },
 
-  dayText: {
-    color: "#333",
-    fontWeight: "600",
-  },
+    swipeableContainer: {
+      marginBottom: CARD_GAP,
+      borderRadius: 24,
+      overflow: "hidden",
+    },
 
-  selectedDayText: {
-    color: "white",
-  },
-  addButton: {
-    backgroundColor: "#6C63FF",
-    paddingVertical: 14,
-    borderRadius: 10,
-    alignItems: "center",
-    marginTop: 20,
-  },
+    habitCard: {
+      flexDirection: "column",
+      justifyContent: "space-between",
+      backgroundColor: theme.card,
+      borderRadius: 24,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: theme.border,
+      paddingHorizontal: 20,
+      paddingVertical: 18,
+    },
 
-  disabledAddButton: {
-    backgroundColor: "#d1d1d6",
-  },
+    habitCardPressed: {
+      opacity: 0.82,
+      transform: [{ scale: 0.99 }],
+    },
 
-  addButtonText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "600",
-  },
+    cardTopRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
 
-  disabledAddButtonText: {
-    color: "#8e8e93",
-  },
-});
+    habitName: {
+      flex: 1,
+      color: theme.text,
+      fontSize: 21,
+      fontWeight: "800",
+      letterSpacing: -0.4,
+      marginRight: 10,
+    },
+
+    streakBadge: {
+      minWidth: 34,
+      height: 34,
+      paddingHorizontal: 8,
+      borderRadius: 17,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: theme.elevated,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: theme.border,
+    },
+
+    streakBadgeText: {
+      color: ACCENT,
+      fontSize: 15,
+      fontWeight: "800",
+      letterSpacing: 0.3,
+    },
+
+    habitSchedule: {
+      color: theme.secondaryText,
+      fontSize: 12,
+      fontWeight: "700",
+      letterSpacing: 0.8,
+      textTransform: "uppercase",
+    },
+
+    dotsRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+
+    dot: {
+      width: 16,
+      height: 16,
+      borderRadius: 8,
+    },
+
+    dotActive: {
+      backgroundColor: theme.text,
+      shadowColor: theme.text,
+      shadowOpacity: 0.5,
+      shadowRadius: 6,
+      shadowOffset: { width: 0, height: 0 },
+    },
+
+    dotInactive: {
+      backgroundColor: theme.dotInactive,
+    },
+
+    deleteActionContainer: {
+      width: 84,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    deleteCircle: {
+      width: 46,
+      height: 46,
+      borderRadius: 23,
+      backgroundColor: DANGER,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    deleteCirclePressed: {
+      opacity: 0.75,
+      transform: [{ scale: 0.94 }],
+    },
+
+    deleteIcon: {
+      color: "#FFFFFF",
+      fontSize: 28,
+      fontWeight: "500",
+      lineHeight: 30,
+    },
+
+    fadeOverlay: {
+      position: "absolute",
+      left: 0,
+      right: 0,
+      bottom: 0,
+    },
+
+    addHabitButton: {
+      position: "absolute",
+      bottom: 22,
+      alignSelf: "center",
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      minWidth: 176,
+      backgroundColor: theme.buttonBackground,
+      paddingHorizontal: 25,
+      paddingVertical: 16,
+      borderRadius: 999,
+    },
+
+    addHabitButtonPressed: {
+      opacity: 0.82,
+      transform: [{ scale: 0.98 }],
+    },
+
+    addHabitPlus: {
+      color: theme.buttonText,
+      fontSize: 22,
+      fontWeight: "500",
+      marginRight: 8,
+      marginTop: -1,
+    },
+
+    addHabitButtonText: {
+      color: theme.buttonText,
+      fontSize: 16,
+      fontWeight: "700",
+    },
+
+    modalBackground: {
+      flex: 1,
+      justifyContent: "flex-end",
+      backgroundColor: theme.overlay,
+    },
+
+    modalBox: {
+      width: "100%",
+      paddingHorizontal: 22,
+      paddingTop: 12,
+      paddingBottom: 36,
+      backgroundColor: theme.elevated,
+      borderTopLeftRadius: 30,
+      borderTopRightRadius: 30,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: theme.border,
+    },
+
+    modalHandle: {
+      width: 42,
+      height: 5,
+      borderRadius: 999,
+      backgroundColor: theme.disabled,
+      alignSelf: "center",
+      marginBottom: 22,
+    },
+
+    modalTitle: {
+      color: theme.text,
+      fontSize: 26,
+      fontWeight: "800",
+      letterSpacing: -0.6,
+      marginBottom: 24,
+    },
+
+    modalLabel: {
+      color: theme.secondaryText,
+      fontSize: 11,
+      fontWeight: "800",
+      letterSpacing: 1.2,
+      marginBottom: 10,
+      marginTop: 4,
+    },
+
+    input: {
+      backgroundColor: theme.field,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: theme.border,
+      borderRadius: 16,
+      paddingHorizontal: 15,
+      paddingVertical: 14,
+      marginBottom: 20,
+      color: theme.text,
+      fontSize: 16,
+    },
+
+    colorOptions: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 12,
+      marginBottom: 22,
+    },
+
+    colorOptionOuter: {
+      width: 42,
+      height: 42,
+      borderRadius: 21,
+      borderWidth: 2,
+      borderColor: "transparent",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    colorOption: {
+      width: 30,
+      height: 30,
+      borderRadius: 15,
+    },
+
+    daysContainer: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginTop: 2,
+    },
+
+    dayButton: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: theme.border,
+      backgroundColor: theme.field,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    dayText: {
+      color: theme.secondaryText,
+      fontWeight: "700",
+    },
+
+    selectedDayText: {
+      color: "#FFFFFF",
+    },
+
+    addButton: {
+      paddingVertical: 15,
+      borderRadius: 16,
+      alignItems: "center",
+      marginTop: 24,
+    },
+
+    disabledAddButton: {
+      backgroundColor: theme.disabled,
+    },
+
+    addButtonText: {
+      color: "#FFFFFF",
+      fontSize: 16,
+      fontWeight: "800",
+    },
+
+    disabledAddButtonText: {
+      color: theme.secondaryText,
+    },
+  });
+}
