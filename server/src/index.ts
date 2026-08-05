@@ -16,7 +16,7 @@ app.get("/supabase/get_habits", async (req, res) => {
   const authHeader = req.headers.authorization;
 
   if (!authHeader?.startsWith("Bearer ")) {
-    return res.status(400).json({
+    return res.status(401).json({
       message: "Access to token required",
     });
   }
@@ -45,7 +45,7 @@ app.get("/supabase/get_habits", async (req, res) => {
 app.post("/supabase/add_habit", async (req, res) => {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith("Bearer ")) {
-    return res.status(400).json({
+    return res.status(401).json({
       message: "Access to token required",
     });
   }
@@ -78,11 +78,12 @@ app.post("/supabase/add_habit", async (req, res) => {
   });
 });
 
+// delete habit
 app.delete("/supabase/delete_habit", async (req, res) => {
   const authHeader = req.headers["authorization"];
   if (!authHeader?.startsWith("Bearer ")) {
-    return res.status(400).json({
-      message: "Access to token required",
+    return res.status(401).json({
+      message: "Access token required",
     });
   }
 
@@ -96,6 +97,45 @@ app.delete("/supabase/delete_habit", async (req, res) => {
   if (error) {
     return res.status(500).json({
       message: error.message,
+    });
+  }
+
+  res.status(200).json({
+    message: "success",
+  });
+});
+
+app.patch("/supabase/update_habit", async (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith("Bearer ")) {
+    return res.status(401).json({
+      message: "Access Token Required",
+    });
+  }
+
+  const accessToken = authHeader.slice("Bearer ".length);
+  const supabase = createUserSupabaseClient(accessToken);
+
+  const { logs: newlog, habitId } = req.body;
+
+  if (
+    !Number.isInteger(habitId) ||
+    typeof newlog !== "object" ||
+    newlog === null
+  ) {
+    return res.status(400).json({
+      message: "Valid habitId and logs are required",
+    });
+  }
+
+  const { error } = await supabase
+    .from("habits")
+    .update({ logs: newlog })
+    .eq("id", habitId);
+
+  if (error) {
+    return res.status(500).json({
+      message: "Failed to update habit. Error code: " + error.message,
     });
   }
 

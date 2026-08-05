@@ -3,9 +3,8 @@ import BottomSheet, {
   BottomSheetBackdrop,
   BottomSheetView,
 } from "@gorhom/bottom-sheet";
-import { User } from "@supabase/supabase-js";
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Modal,
@@ -87,7 +86,6 @@ export default function CalendarScreen() {
 
   const bottomSheetRef = useRef<BottomSheet>(null);
 
-  const [user, setUser] = useState<User | null>(null);
   const [habits, setHabits] = useState<CalendarHabit[]>([]);
   const [selectedHabit, setSelectedHabit] = useState<CalendarHabit | null>(
     null,
@@ -102,53 +100,51 @@ export default function CalendarScreen() {
 
   const snapPoints = useMemo(() => ["40%"], []);
 
-  //get user
-  useEffect(() => {
-    async function getUser() {
-      const {
-        data: { user },
-        error,
-      } = await supabase.auth.getUser();
-
-      if (!user) {
-        Alert.alert("User not loaded", error?.message);
-        return;
-      }
-
-      setUser(user);
-    }
-
-    getUser();
-  }, []);
-
   // fetch habits when calendar tab becomes focused again
   useFocusEffect(
     useCallback(() => {
       async function fetchHabits() {
-        if (!user) return;
-
-        const { data, error } = await supabase
-          .from("habits")
-          .select("id, name, logs, repeat_days, created_at")
-          .eq("user_id", user.id)
-          .order("created_at", { ascending: true });
-
+        const { data, error } = await supabase.auth.getSession();
         if (error) {
-          Alert.alert("Trouble retrieving habits", error.message);
+          Alert.alert(error.message);
+          return;
+        }
+        const accessToken = data.session?.access_token;
+        if (!accessToken) {
+          Alert.alert("Access Token is not available");
           return;
         }
 
-        setHabits(data);
-
-        const habitFromHome = data.find(
-          (habit) => habit.id === Number(habitId),
+        const res = await fetch(
+          `${process.env.EXPO_PUBLIC_API_URL}/supabase/get_habits`,
+          {
+            method: "GET",
+            headers: {
+              authorization: "Bearer " + accessToken,
+            },
+          },
         );
 
-        setSelectedHabit(habitFromHome ?? data[0] ?? null);
+        const response = await res.json();
+
+        if (!res.ok) {
+          Alert.alert(response.message);
+          return;
+        }
+
+        const fetchedHabit = response.habits;
+
+        setHabits(fetchedHabit);
+
+        const habitFromHome = fetchedHabit.find(
+          (habit: any) => habit.id === Number(habitId),
+        );
+
+        setSelectedHabit(habitFromHome ?? fetchedHabit[0] ?? null);
       }
 
-      fetchHabits();
-    }, [user, habitId]),
+      void fetchHabits();
+    }, [habitId]),
   );
 
   const streak = useMemo(() => {
@@ -342,13 +338,36 @@ export default function CalendarScreen() {
       newLog[currDay.dateString] = completed;
     }
 
-    const { error } = await supabase
-      .from("habits")
-      .update({ logs: newLog })
-      .eq("id", selectedHabit.id);
+    const { data, error: err } = await supabase.auth.getSession();
+    if (err) {
+      Alert.alert(err.message);
+      return;
+    }
 
-    if (error) {
-      Alert.alert("Something went wrong while updating", error.message);
+    const accessToken = data.session?.access_token;
+    if (!accessToken) {
+      Alert.alert("Access token is unavailable");
+      return;
+    }
+
+    const res = await fetch(
+      `${process.env.EXPO_PUBLIC_API_URL}/supabase/update_habit`,
+      {
+        method: "PATCH",
+        headers: {
+          authorization: "Bearer " + accessToken,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          logs: newLog,
+          habitId: selectedHabit.id,
+        }),
+      },
+    );
+
+    const response = await res.json();
+    if (!res.ok) {
+      Alert.alert(response.message);
       return;
     }
 
