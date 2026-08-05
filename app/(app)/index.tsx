@@ -1,10 +1,9 @@
 import { supabase } from "@/utils/supabase";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import type { User } from "@supabase/supabase-js";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
-import { router } from "expo-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { router, useFocusEffect } from "expo-router";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Modal,
@@ -61,7 +60,7 @@ export default function HomeScreen() {
   const [habits, setHabits] = useState<StoredHabit[]>([]);
   const [habitName, setHabitName] = useState("");
   const [isModalVisible, setIsModalVisible] = useState(false);
-  const [user, setUser] = useState<User | null>(null);
+  // const [user, setUser] = useState<User | null>(null);
   const [notificationTime, setNotificationTime] = useState(
     new Date(2026, 0, 1, 23, 59),
   );
@@ -94,46 +93,47 @@ export default function HomeScreen() {
     });
   }
 
-  useEffect(() => {
-    async function fetchUser() {
-      const {
-        data: { user },
-        error,
-      } = await supabase.auth.getUser();
-
-      if (error) {
-        Alert.alert("Unable to load your account", error.message);
-        return;
-      }
-
-      setUser(user);
+  async function fetchHabits() {
+    const { data, error } = await supabase.auth.getSession();
+    if (error) {
+      Alert.alert("Cannot retrieve habits", error.message);
+      return;
     }
 
-    void fetchUser();
-  }, []);
+    const accessToken = data.session?.access_token;
 
-  useEffect(() => {
-    async function fetchHabits() {
-      if (!user) {
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from("habits")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: true });
-
-      if (error) {
-        Alert.alert("Cannot retrieve habits", error.message);
-        return;
-      }
-
-      setHabits(data ?? []);
+    if (!accessToken) {
+      Alert.alert("You are not signed in");
+      return;
     }
 
-    void fetchHabits();
-  }, [user]);
+    const res = await fetch(
+      `${process.env.EXPO_PUBLIC_API_URL}/supabase/get_habits`,
+      {
+        method: "GET",
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+        },
+      },
+    );
+
+    const response = await res.json();
+
+    if (res.status !== 200) {
+      Alert.alert(`${response.message}`);
+    }
+
+    setHabits(response.habits ?? []);
+
+    console.log("habits retreived");
+  }
+
+  // call the habits function every time home gets focused.
+  useFocusEffect(
+    useCallback(() => {
+      void fetchHabits();
+    }, []),
+  );
 
   function formatTimeForSupabase(date: Date): string {
     const hours = date.getHours().toString().padStart(2, "0");
@@ -205,54 +205,86 @@ export default function HomeScreen() {
   }
 
   async function handleAddHabit() {
-    if (!user || isAddHabitButtonDisabled) {
-      return;
-    }
-
     const newHabit: NewHabit = {
       name: habitName.trim(),
-      user_id: user.id,
       notification_time: formatTimeForSupabase(notificationTime),
       notification_enabled: true,
       repeat_days: selectedDays,
     };
 
-    const { data, error } = await supabase
-      .from("habits")
-      .insert(newHabit)
-      .select()
-      .single();
-
+    const { data, error } = await supabase.auth.getSession();
     if (error) {
-      Alert.alert("Unable to add habit", error.message);
+      Alert.alert(error.message);
       return;
     }
 
-    setHabits((currentHabits) => [...currentHabits, data]);
+    const accessToken = data.session?.access_token;
+
+    if (!accessToken) {
+      Alert.alert("You are not signed in");
+      return;
+    }
+
+    const res = await fetch(
+      `${process.env.EXPO_PUBLIC_API_URL}/supabase/add_habit`,
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer " + accessToken,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(newHabit),
+      },
+    );
+
+    const response = await res.json();
+
+    if (!res.ok) {
+      Alert.alert(response.message);
+      return;
+    }
+
+    await fetchHabits();
     resetHabitForm();
   }
 
   async function deleteHabitFromDB(habitId: number) {
-    if (!user) {
+    const { data, error } = await supabase.auth.getSession();
+
+    if (error) {
+      Alert.alert(error.message);
       return;
     }
 
-    const { error } = await supabase
-      .from("habits")
-      .delete()
-      .eq("id", habitId)
-      .eq("user_id", user.id);
+    const accessToken = data.session?.access_token;
 
-    if (error) {
-      Alert.alert("Unable to delete habit", error.message);
+    if (!accessToken) {
+      Alert.alert("No user signed in");
+      return;
+    }
+
+    const res = await fetch(
+      `${process.env.EXPO_PUBLIC_API_URL}/supabase/delete_habit`,
+      {
+        method: "DELETE",
+        headers: {
+          authorization: "Bearer " + accessToken,
+          "Content-type": "application/json",
+        },
+        body: JSON.stringify({ habitId }),
+      },
+    );
+
+    const response = await res.json();
+
+    if (!res.ok) {
+      Alert.alert(response.message);
       return;
     }
 
     swipeableRefs.delete(habitId);
 
-    setHabits((currentHabits) =>
-      currentHabits.filter((habit) => habit.id !== habitId),
-    );
+    await fetchHabits();
   }
 
   function handleSwipeDelete(habitId: number) {
