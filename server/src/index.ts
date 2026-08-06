@@ -1,15 +1,24 @@
 import "dotenv/config";
 import express from "express";
+import { rateLimit } from "express-rate-limit";
 import createUserSupabaseClient from "./utils/supabase.js";
 
 const app = express();
+
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 200,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  message: {
+    message: "Too many requests. Please try again later.",
+  },
+});
+
 app.use(express.json());
+app.use("/supabase", apiLimiter);
 
 const PORT = Number(process.env.PORT) || 3000;
-
-app.listen(PORT, () => {
-  console.log("Server Running on port:", { PORT });
-});
 
 // get habits
 app.get("/supabase/get_habits", async (req, res) => {
@@ -142,4 +151,8 @@ app.patch("/supabase/update_habit", async (req, res) => {
   res.status(200).json({
     message: "success",
   });
+});
+
+app.listen(PORT, () => {
+  console.log("Server Running on port:", { PORT });
 });
