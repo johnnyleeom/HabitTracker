@@ -7,6 +7,6 @@ export type NewHabit = {
 
 export type StoredHabit = NewHabit & {
   id: number;
-  createdAt: string;
+  created_at: string;
   logs: Record<string, boolean>;
 };

@@ -50,7 +50,7 @@ app.get("/supabase/get_habits", async (req, res) => {
   });
 });
 
-//update habits
+//add_habits
 app.post("/supabase/add_habit", async (req, res) => {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith("Bearer ")) {
@@ -74,7 +74,11 @@ app.post("/supabase/add_habit", async (req, res) => {
     user_id: data.user.id,
   };
 
-  const { error } = await supabase.from("habits").insert(newHabits);
+  const { data: createdHabit, error } = await supabase
+    .from("habits")
+    .insert(newHabits)
+    .select()
+    .single();
 
   if (error) {
     return res.status(500).json({
@@ -82,8 +86,9 @@ app.post("/supabase/add_habit", async (req, res) => {
     });
   }
 
-  res.status(200).json({
+  return res.status(200).json({
     message: "success",
+    returnedHabit: createdHabit,
   });
 });
 

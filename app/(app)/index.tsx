@@ -1,3 +1,8 @@
+import requestNotificationPermission, {
+  cancelHabitNotifications,
+  saveNotificationIds,
+  scheduleHabitNotification,
+} from "@/utils/notification";
 import { supabase } from "@/utils/supabase";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import * as Haptics from "expo-haptics";
@@ -31,6 +36,26 @@ const FALLBACK_CARD_HEIGHT = 108;
 
 const ACCENT = "#34C759";
 const DANGER = "#FF3B30";
+
+const daysToNumber: Record<string, number> = {
+  sunday: 0,
+  monday: 1,
+  tuesday: 2,
+  wednesday: 3,
+  thursday: 4,
+  friday: 5,
+  saturday: 6,
+};
+
+const dayOrder: Record<string, number> = {
+  sunday: 0,
+  monday: 1,
+  tuesday: 2,
+  wednesday: 3,
+  thursday: 4,
+  friday: 5,
+  saturday: 6,
+};
 
 function getTheme(isDark: boolean) {
   return {
@@ -91,6 +116,14 @@ export default function HomeScreen() {
         ref?.close();
       }
     });
+  }
+
+  function formatDate(date: Date): string {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+
+    return `${year}-${month}-${day}`;
   }
 
   async function fetchHabits() {
@@ -174,7 +207,10 @@ export default function HomeScreen() {
       return "Every day";
     }
 
-    return repeatDays.map((day) => day.slice(0, 3)).join(", ");
+    return [...repeatDays]
+      .sort((a, b) => dayOrder[a.toLowerCase()] - dayOrder[b.toLowerCase()])
+      .map((day) => day.slice(0, 3))
+      .join(", ");
   }
 
   function formatScheduleLine(habit: StoredHabit) {
@@ -184,17 +220,40 @@ export default function HomeScreen() {
     return `${schedule} • ${time}`;
   }
 
-  /**
-   * Placeholder until real streak tracking exists (e.g. a completions table
-   * or a `current_streak` column). index.tsx has no visibility into that
-   * data yet, so this always renders 0 rather than guessing. Swap the body
-   * of this function out once that data is available — the badge UI below
-   * doesn't need to change, just this calculation.
-   */
   function getHabitStreak(habit: StoredHabit): number {
-    return (
-      (habit as StoredHabit & { current_streak?: number }).current_streak ?? 0
+    const frequencyInNumbers = habit.repeat_days.map(
+      (day) => daysToNumber[day.toLowerCase()],
     );
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const createdDate = new Date(habit.created_at);
+    createdDate.setHours(0, 0, 0, 0);
+
+    const currentDate = new Date(today);
+    let currentStreak = 0;
+
+    while (currentDate >= createdDate) {
+      const isScheduled = frequencyInNumbers.includes(currentDate.getDay());
+
+      if (isScheduled) {
+        const dateString = formatDate(currentDate);
+        const completed = habit.logs?.[dateString];
+
+        const isToday = currentDate.getTime() === today.getTime();
+
+        if (completed === true) {
+          currentStreak++;
+        } else if (!isToday) {
+          break;
+        }
+      }
+
+      currentDate.setDate(currentDate.getDate() - 1);
+    }
+
+    return currentStreak;
   }
 
   function resetHabitForm() {
@@ -244,6 +303,34 @@ export default function HomeScreen() {
       return;
     }
 
+    const notificationGranted = await requestNotificationPermission();
+
+    if (!notificationGranted) {
+      Alert.alert(
+        "Notifications disabled",
+        "The habit was created, but reminders are turned off.",
+      );
+      await fetchHabits();
+      resetHabitForm();
+      return;
+    }
+
+    const newlyInsertedHabitId = response.returnedHabit.id;
+
+    const notificationIDs: string[] = [];
+    for (const day of selectedDays) {
+      const notificationID = await scheduleHabitNotification(
+        newlyInsertedHabitId,
+        habitName.trim(),
+        notificationTime,
+        daysToNumber[day] + 1,
+      );
+
+      notificationIDs.push(notificationID);
+    }
+
+    await saveNotificationIds(newlyInsertedHabitId, notificationIDs);
+
     await fetchHabits();
     resetHabitForm();
   }
@@ -262,6 +349,8 @@ export default function HomeScreen() {
       Alert.alert("No user signed in");
       return;
     }
+
+    await cancelHabitNotifications(habitId);
 
     const res = await fetch(
       `${process.env.EXPO_PUBLIC_API_URL}/supabase/delete_habit`,
