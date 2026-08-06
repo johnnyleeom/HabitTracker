@@ -1,3 +1,9 @@
+import {
+  daysToNumber,
+  formatDate,
+  getHabitStreak,
+  getMaxStreaks,
+} from "@/utils/helper";
 import { supabase } from "@/utils/supabase";
 import BottomSheet, {
   BottomSheetBackdrop,
@@ -15,6 +21,7 @@ import {
   View,
 } from "react-native";
 import { CalendarList, DateData } from "react-native-calendars";
+import { StoredHabit } from "../types/habit";
 
 const CALENDAR_HEIGHT = 420;
 const CALENDAR_SIDE_BLEED = 8;
@@ -34,24 +41,6 @@ const COLORS = {
   white: "#FFFFFF",
 };
 
-type CalendarHabit = {
-  id: number;
-  name: string;
-  logs: Record<string, boolean>;
-  repeat_days: string[];
-  created_at: string;
-};
-
-const daysToNumber: Record<string, number> = {
-  sunday: 0,
-  monday: 1,
-  tuesday: 2,
-  wednesday: 3,
-  thursday: 4,
-  friday: 5,
-  saturday: 6,
-};
-
 const shortDayNames: Record<string, string> = {
   sunday: "SUN",
   monday: "MON",
@@ -62,15 +51,7 @@ const shortDayNames: Record<string, string> = {
   saturday: "SAT",
 };
 
-function formatDate(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-
-  return `${year}-${month}-${day}`;
-}
-
-function formatSchedule(repeatDays: string[]): string {
+export function formatSchedule(repeatDays: string[]): string {
   if (repeatDays.length === 7) {
     return "EVERY DAY";
   }
@@ -86,10 +67,8 @@ export default function CalendarScreen() {
 
   const bottomSheetRef = useRef<BottomSheet>(null);
 
-  const [habits, setHabits] = useState<CalendarHabit[]>([]);
-  const [selectedHabit, setSelectedHabit] = useState<CalendarHabit | null>(
-    null,
-  );
+  const [habits, setHabits] = useState<StoredHabit[]>([]);
+  const [selectedHabit, setSelectedHabit] = useState<StoredHabit | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [currDay, setCurrDay] = useState<DateData | null>(null);
   const [inlineMessage, setInlineMessage] = useState<string | null>(null);
@@ -147,45 +126,16 @@ export default function CalendarScreen() {
     }, [habitId]),
   );
 
+  //
+  // DATA HELPERS START
+  //
+
   const streak = useMemo(() => {
     if (!selectedHabit) {
       return 0;
     }
 
-    const frequencyInNumbers = selectedHabit.repeat_days.map(
-      (day) => daysToNumber[day],
-    );
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const createdDate = new Date(selectedHabit.created_at);
-    createdDate.setHours(0, 0, 0, 0);
-
-    const currentDate = new Date(today);
-
-    let currentStreak = 0;
-
-    while (currentDate >= createdDate) {
-      const dayNumber = currentDate.getDay();
-
-      if (frequencyInNumbers.includes(dayNumber)) {
-        const dateString = formatDate(currentDate);
-        const completed = selectedHabit.logs[dateString];
-
-        const isToday = currentDate.getTime() === today.getTime();
-
-        if (completed === true) {
-          currentStreak++;
-        } else if (!isToday) {
-          break;
-        }
-      }
-
-      currentDate.setDate(currentDate.getDate() - 1);
-    }
-
-    return currentStreak;
+    return getHabitStreak(selectedHabit);
   }, [selectedHabit]);
 
   const maxStreak = useMemo(() => {
@@ -193,40 +143,7 @@ export default function CalendarScreen() {
       return 0;
     }
 
-    const frequencyInNumbers = selectedHabit.repeat_days.map(
-      (day) => daysToNumber[day],
-    );
-
-    const createdDate = new Date(selectedHabit.created_at);
-    createdDate.setHours(0, 0, 0, 0);
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const currentDate = new Date(createdDate);
-
-    let currentRun = 0;
-    let longestRun = 0;
-
-    while (currentDate <= today) {
-      const dayNumber = currentDate.getDay();
-
-      if (frequencyInNumbers.includes(dayNumber)) {
-        const dateString = formatDate(currentDate);
-        const completed = selectedHabit.logs[dateString];
-
-        if (completed === true) {
-          currentRun++;
-          longestRun = Math.max(longestRun, currentRun);
-        } else {
-          currentRun = 0;
-        }
-      }
-
-      currentDate.setDate(currentDate.getDate() + 1);
-    }
-
-    return longestRun;
+    return getMaxStreaks(selectedHabit);
   }, [selectedHabit]);
 
   const loggedDaysThisMonth = useMemo(() => {
@@ -258,7 +175,7 @@ export default function CalendarScreen() {
     bottomSheetRef.current?.snapToIndex(0);
   }
 
-  function selectHabit(habit: CalendarHabit) {
+  function selectHabit(habit: StoredHabit) {
     setSelectedHabit(habit);
     setInlineMessage(null);
     bottomSheetRef.current?.close();
@@ -322,6 +239,10 @@ export default function CalendarScreen() {
 
     editDate(day);
   }
+
+  //
+  // DATA HELPERS END
+  //
 
   async function updateCalendar(completed: boolean | null) {
     if (!currDay || !selectedHabit) {

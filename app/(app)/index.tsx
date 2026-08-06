@@ -1,3 +1,9 @@
+import {
+  daysToNumber,
+  formatScheduleLine,
+  formatTimeForSupabase,
+  getHabitStreak,
+} from "@/utils/helper";
 import requestNotificationPermission, {
   cancelHabitNotifications,
   saveNotificationIds,
@@ -36,26 +42,6 @@ const FALLBACK_CARD_HEIGHT = 108;
 
 const ACCENT = "#34C759";
 const DANGER = "#FF3B30";
-
-const daysToNumber: Record<string, number> = {
-  sunday: 0,
-  monday: 1,
-  tuesday: 2,
-  wednesday: 3,
-  thursday: 4,
-  friday: 5,
-  saturday: 6,
-};
-
-const dayOrder: Record<string, number> = {
-  sunday: 0,
-  monday: 1,
-  tuesday: 2,
-  wednesday: 3,
-  thursday: 4,
-  friday: 5,
-  saturday: 6,
-};
 
 function getTheme(isDark: boolean) {
   return {
@@ -118,14 +104,6 @@ export default function HomeScreen() {
     });
   }
 
-  function formatDate(date: Date): string {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const day = String(date.getDate()).padStart(2, "0");
-
-    return `${year}-${month}-${day}`;
-  }
-
   async function fetchHabits() {
     const { data, error } = await supabase.auth.getSession();
     if (error) {
@@ -154,6 +132,7 @@ export default function HomeScreen() {
 
     if (res.status !== 200) {
       Alert.alert(`${response.message}`);
+      return;
     }
 
     setHabits(response.habits ?? []);
@@ -167,101 +146,6 @@ export default function HomeScreen() {
       void fetchHabits();
     }, []),
   );
-
-  function formatTimeForSupabase(date: Date): string {
-    const hours = date.getHours().toString().padStart(2, "0");
-    const minutes = date.getMinutes().toString().padStart(2, "0");
-    const seconds = date.getSeconds().toString().padStart(2, "0");
-
-    return `${hours}:${minutes}:${seconds}`;
-  }
-
-  function formatNotificationTime(value: string | null | undefined) {
-    if (!value) {
-      return "No reminder";
-    }
-
-    const [hourString, minuteString] = value.split(":");
-    const hour = Number(hourString);
-    const minute = Number(minuteString);
-
-    if (Number.isNaN(hour) || Number.isNaN(minute)) {
-      return "Reminder set";
-    }
-
-    const date = new Date();
-    date.setHours(hour, minute, 0, 0);
-
-    return date.toLocaleTimeString([], {
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  }
-
-  function formatRepeatDays(repeatDays: string[] | null | undefined) {
-    if (!repeatDays || repeatDays.length === 0) {
-      return "No scheduled days";
-    }
-
-    if (repeatDays.length === 7) {
-      return "Every day";
-    }
-
-    return [...repeatDays]
-      .sort((a, b) => dayOrder[a.toLowerCase()] - dayOrder[b.toLowerCase()])
-      .map((day) => day.slice(0, 3))
-      .join(", ");
-  }
-
-  function formatScheduleLine(habit: StoredHabit) {
-    const schedule = formatRepeatDays(habit.repeat_days);
-    const time = formatNotificationTime(habit.notification_time);
-
-    return `${schedule} • ${time}`;
-  }
-
-  function getHabitStreak(habit: StoredHabit): number {
-    const frequencyInNumbers = habit.repeat_days.map(
-      (day) => daysToNumber[day.toLowerCase()],
-    );
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const createdDate = new Date(habit.created_at);
-    createdDate.setHours(0, 0, 0, 0);
-
-    const currentDate = new Date(today);
-    let currentStreak = 0;
-
-    while (currentDate >= createdDate) {
-      const isScheduled = frequencyInNumbers.includes(currentDate.getDay());
-
-      if (isScheduled) {
-        const dateString = formatDate(currentDate);
-        const completed = habit.logs?.[dateString];
-
-        const isToday = currentDate.getTime() === today.getTime();
-
-        if (completed === true) {
-          currentStreak++;
-        } else if (!isToday) {
-          break;
-        }
-      }
-
-      currentDate.setDate(currentDate.getDate() - 1);
-    }
-
-    return currentStreak;
-  }
-
-  function resetHabitForm() {
-    setHabitName("");
-    setNotificationTime(new Date(2026, 0, 1, 23, 59));
-    setSelectedDays([]);
-    setIsModalVisible(false);
-  }
 
   async function handleAddHabit() {
     const newHabit: NewHabit = {
@@ -398,6 +282,13 @@ export default function HomeScreen() {
         ? currentDays.filter((selectedDay) => selectedDay !== day)
         : [...currentDays, day],
     );
+  }
+
+  function resetHabitForm() {
+    setHabitName("");
+    setNotificationTime(new Date(2026, 0, 1, 23, 59));
+    setSelectedDays([]);
+    setIsModalVisible(false);
   }
 
   return (
