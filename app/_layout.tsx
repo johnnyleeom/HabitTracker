@@ -31,7 +31,7 @@ export default function RootLayout() {
     lastHandledNotificationId.current = notificationId;
 
     router.push({
-      pathname: "/(app)/notification",
+      pathname: "/notification",
       params: {
         habitId: habitId.toString(),
       },
