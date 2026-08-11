@@ -1,11 +1,16 @@
+import {
+  daysToNumber,
+  formatDate,
+  getHabitStreak,
+  getMaxStreaks,
+} from "@/utils/helper";
 import { supabase } from "@/utils/supabase";
 import BottomSheet, {
   BottomSheetBackdrop,
   BottomSheetView,
 } from "@gorhom/bottom-sheet";
-import { User } from "@supabase/supabase-js";
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Modal,
@@ -16,6 +21,7 @@ import {
   View,
 } from "react-native";
 import { CalendarList, DateData } from "react-native-calendars";
+import { StoredHabit } from "../types/habit";
 
 const CALENDAR_HEIGHT = 420;
 const CALENDAR_SIDE_BLEED = 8;
@@ -35,24 +41,6 @@ const COLORS = {
   white: "#FFFFFF",
 };
 
-type CalendarHabit = {
-  id: number;
-  name: string;
-  logs: Record<string, boolean>;
-  repeat_days: string[];
-  created_at: string;
-};
-
-const daysToNumber: Record<string, number> = {
-  sunday: 0,
-  monday: 1,
-  tuesday: 2,
-  wednesday: 3,
-  thursday: 4,
-  friday: 5,
-  saturday: 6,
-};
-
 const shortDayNames: Record<string, string> = {
   sunday: "SUN",
   monday: "MON",
@@ -63,15 +51,7 @@ const shortDayNames: Record<string, string> = {
   saturday: "SAT",
 };
 
-function formatDate(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-
-  return `${year}-${month}-${day}`;
-}
-
-function formatSchedule(repeatDays: string[]): string {
+export function formatSchedule(repeatDays: string[]): string {
   if (repeatDays.length === 7) {
     return "EVERY DAY";
   }
@@ -87,11 +67,8 @@ export default function CalendarScreen() {
 
   const bottomSheetRef = useRef<BottomSheet>(null);
 
-  const [user, setUser] = useState<User | null>(null);
-  const [habits, setHabits] = useState<CalendarHabit[]>([]);
-  const [selectedHabit, setSelectedHabit] = useState<CalendarHabit | null>(
-    null,
-  );
+  const [habits, setHabits] = useState<StoredHabit[]>([]);
+  const [selectedHabit, setSelectedHabit] = useState<StoredHabit | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [currDay, setCurrDay] = useState<DateData | null>(null);
   const [inlineMessage, setInlineMessage] = useState<string | null>(null);
@@ -102,94 +79,63 @@ export default function CalendarScreen() {
 
   const snapPoints = useMemo(() => ["40%"], []);
 
-  //get user
-  useEffect(() => {
-    async function getUser() {
-      const {
-        data: { user },
-        error,
-      } = await supabase.auth.getUser();
-
-      if (!user) {
-        Alert.alert("User not loaded", error?.message);
-        return;
-      }
-
-      setUser(user);
-    }
-
-    getUser();
-  }, []);
-
   // fetch habits when calendar tab becomes focused again
   useFocusEffect(
     useCallback(() => {
       async function fetchHabits() {
-        if (!user) return;
-
-        const { data, error } = await supabase
-          .from("habits")
-          .select("id, name, logs, repeat_days, created_at")
-          .eq("user_id", user.id)
-          .order("created_at", { ascending: true });
-
+        const { data, error } = await supabase.auth.getSession();
         if (error) {
-          Alert.alert("Trouble retrieving habits", error.message);
+          Alert.alert(error.message);
+          return;
+        }
+        const accessToken = data.session?.access_token;
+        if (!accessToken) {
+          Alert.alert("Access Token is not available");
           return;
         }
 
-        setHabits(data);
-
-        const habitFromHome = data.find(
-          (habit) => habit.id === Number(habitId),
+        const res = await fetch(
+          `${process.env.EXPO_PUBLIC_API_URL}/supabase/get_habits`,
+          {
+            method: "GET",
+            headers: {
+              authorization: "Bearer " + accessToken,
+            },
+          },
         );
 
-        setSelectedHabit(habitFromHome ?? data[0] ?? null);
+        const response = await res.json();
+
+        if (!res.ok) {
+          Alert.alert(response.message);
+          return;
+        }
+
+        const fetchedHabit = response.habits;
+
+        setHabits(fetchedHabit);
+
+        const habitFromHome = fetchedHabit.find(
+          (habit: any) => habit.id === Number(habitId),
+        );
+
+        setSelectedHabit(habitFromHome ?? fetchedHabit[0] ?? null);
       }
 
-      fetchHabits();
-    }, [user, habitId]),
+      void fetchHabits();
+    }, [habitId]),
   );
+
+  //
+  // DATA HELPERS START
+  //
 
   const streak = useMemo(() => {
     if (!selectedHabit) {
       return 0;
     }
 
-    const frequencyInNumbers = selectedHabit.repeat_days.map(
-      (day) => daysToNumber[day],
-    );
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const createdDate = new Date(selectedHabit.created_at);
-    createdDate.setHours(0, 0, 0, 0);
-
-    const currentDate = new Date(today);
-
-    let currentStreak = 0;
-
-    while (currentDate >= createdDate) {
-      const dayNumber = currentDate.getDay();
-
-      if (frequencyInNumbers.includes(dayNumber)) {
-        const dateString = formatDate(currentDate);
-        const completed = selectedHabit.logs[dateString];
-
-        const isToday = currentDate.getTime() === today.getTime();
-
-        if (completed === true) {
-          currentStreak++;
-        } else if (!isToday) {
-          break;
-        }
-      }
-
-      currentDate.setDate(currentDate.getDate() - 1);
-    }
-
-    return currentStreak;
+    return getHabitStreak(selectedHabit);
   }, [selectedHabit]);
 
   const maxStreak = useMemo(() => {
@@ -197,40 +143,7 @@ export default function CalendarScreen() {
       return 0;
     }
 
-    const frequencyInNumbers = selectedHabit.repeat_days.map(
-      (day) => daysToNumber[day],
-    );
-
-    const createdDate = new Date(selectedHabit.created_at);
-    createdDate.setHours(0, 0, 0, 0);
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const currentDate = new Date(createdDate);
-
-    let currentRun = 0;
-    let longestRun = 0;
-
-    while (currentDate <= today) {
-      const dayNumber = currentDate.getDay();
-
-      if (frequencyInNumbers.includes(dayNumber)) {
-        const dateString = formatDate(currentDate);
-        const completed = selectedHabit.logs[dateString];
-
-        if (completed === true) {
-          currentRun++;
-          longestRun = Math.max(longestRun, currentRun);
-        } else {
-          currentRun = 0;
-        }
-      }
-
-      currentDate.setDate(currentDate.getDate() + 1);
-    }
-
-    return longestRun;
+    return getMaxStreaks(selectedHabit);
   }, [selectedHabit]);
 
   const loggedDaysThisMonth = useMemo(() => {
@@ -262,7 +175,7 @@ export default function CalendarScreen() {
     bottomSheetRef.current?.snapToIndex(0);
   }
 
-  function selectHabit(habit: CalendarHabit) {
+  function selectHabit(habit: StoredHabit) {
     setSelectedHabit(habit);
     setInlineMessage(null);
     bottomSheetRef.current?.close();
@@ -327,6 +240,10 @@ export default function CalendarScreen() {
     editDate(day);
   }
 
+  //
+  // DATA HELPERS END
+  //
+
   async function updateCalendar(completed: boolean | null) {
     if (!currDay || !selectedHabit) {
       return;
@@ -342,13 +259,36 @@ export default function CalendarScreen() {
       newLog[currDay.dateString] = completed;
     }
 
-    const { error } = await supabase
-      .from("habits")
-      .update({ logs: newLog })
-      .eq("id", selectedHabit.id);
+    const { data, error: err } = await supabase.auth.getSession();
+    if (err) {
+      Alert.alert(err.message);
+      return;
+    }
 
-    if (error) {
-      Alert.alert("Something went wrong while updating", error.message);
+    const accessToken = data.session?.access_token;
+    if (!accessToken) {
+      Alert.alert("Access token is unavailable");
+      return;
+    }
+
+    const res = await fetch(
+      `${process.env.EXPO_PUBLIC_API_URL}/supabase/update_habit`,
+      {
+        method: "PATCH",
+        headers: {
+          authorization: "Bearer " + accessToken,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          logs: newLog,
+          habitId: selectedHabit.id,
+        }),
+      },
+    );
+
+    const response = await res.json();
+    if (!res.ok) {
+      Alert.alert(response.message);
       return;
     }
 
@@ -407,7 +347,7 @@ export default function CalendarScreen() {
             horizontal={false}
             pagingEnabled
             hideExtraDays
-            current={new Date().toISOString().split("T")[0]}
+            current={formatDate(new Date())}
             calendarHeight={CALENDAR_HEIGHT}
             calendarWidth={calendarWidth}
             style={[styles.calendar, { width: calendarWidth }]}
@@ -481,6 +421,7 @@ export default function CalendarScreen() {
                         styles.dayText,
                         isSuccess && styles.successDayText,
                         isUnavailable && styles.unavailableDayText,
+                        !isScheduled && styles.unscheduledDayText,
                       ]}
                     >
                       {date.day}
@@ -1161,5 +1102,9 @@ const styles = StyleSheet.create({
     color: COLORS.secondaryText,
     fontSize: 14,
     fontWeight: "700",
+  },
+
+  unscheduledDayText: {
+    textDecorationLine: "line-through",
   },
 });

@@ -1,10 +1,20 @@
+import {
+  daysToNumber,
+  formatScheduleLine,
+  formatTimeForSupabase,
+  getHabitStreak,
+} from "@/utils/helper";
+import requestNotificationPermission, {
+  cancelHabitNotifications,
+  saveNotificationIds,
+  scheduleHabitNotification,
+} from "@/utils/notification";
 import { supabase } from "@/utils/supabase";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import type { User } from "@supabase/supabase-js";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
-import { router } from "expo-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { router, useFocusEffect } from "expo-router";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Modal,
@@ -61,7 +71,7 @@ export default function HomeScreen() {
   const [habits, setHabits] = useState<StoredHabit[]>([]);
   const [habitName, setHabitName] = useState("");
   const [isModalVisible, setIsModalVisible] = useState(false);
-  const [user, setUser] = useState<User | null>(null);
+  // const [user, setUser] = useState<User | null>(null);
   const [notificationTime, setNotificationTime] = useState(
     new Date(2026, 0, 1, 23, 59),
   );
@@ -94,165 +104,158 @@ export default function HomeScreen() {
     });
   }
 
-  useEffect(() => {
-    async function fetchUser() {
-      const {
-        data: { user },
-        error,
-      } = await supabase.auth.getUser();
-
-      if (error) {
-        Alert.alert("Unable to load your account", error.message);
-        return;
-      }
-
-      setUser(user);
-    }
-
-    void fetchUser();
-  }, []);
-
-  useEffect(() => {
-    async function fetchHabits() {
-      if (!user) {
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from("habits")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: true });
-
-      if (error) {
-        Alert.alert("Cannot retrieve habits", error.message);
-        return;
-      }
-
-      setHabits(data ?? []);
-    }
-
-    void fetchHabits();
-  }, [user]);
-
-  function formatTimeForSupabase(date: Date): string {
-    const hours = date.getHours().toString().padStart(2, "0");
-    const minutes = date.getMinutes().toString().padStart(2, "0");
-    const seconds = date.getSeconds().toString().padStart(2, "0");
-
-    return `${hours}:${minutes}:${seconds}`;
-  }
-
-  function formatNotificationTime(value: string | null | undefined) {
-    if (!value) {
-      return "No reminder";
-    }
-
-    const [hourString, minuteString] = value.split(":");
-    const hour = Number(hourString);
-    const minute = Number(minuteString);
-
-    if (Number.isNaN(hour) || Number.isNaN(minute)) {
-      return "Reminder set";
-    }
-
-    const date = new Date();
-    date.setHours(hour, minute, 0, 0);
-
-    return date.toLocaleTimeString([], {
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  }
-
-  function formatRepeatDays(repeatDays: string[] | null | undefined) {
-    if (!repeatDays || repeatDays.length === 0) {
-      return "No scheduled days";
-    }
-
-    if (repeatDays.length === 7) {
-      return "Every day";
-    }
-
-    return repeatDays.map((day) => day.slice(0, 3)).join(", ");
-  }
-
-  function formatScheduleLine(habit: StoredHabit) {
-    const schedule = formatRepeatDays(habit.repeat_days);
-    const time = formatNotificationTime(habit.notification_time);
-
-    return `${schedule} • ${time}`;
-  }
-
-  /**
-   * Placeholder until real streak tracking exists (e.g. a completions table
-   * or a `current_streak` column). index.tsx has no visibility into that
-   * data yet, so this always renders 0 rather than guessing. Swap the body
-   * of this function out once that data is available — the badge UI below
-   * doesn't need to change, just this calculation.
-   */
-  function getHabitStreak(habit: StoredHabit): number {
-    return (
-      (habit as StoredHabit & { current_streak?: number }).current_streak ?? 0
-    );
-  }
-
-  function resetHabitForm() {
-    setHabitName("");
-    setNotificationTime(new Date(2026, 0, 1, 23, 59));
-    setSelectedDays([]);
-    setIsModalVisible(false);
-  }
-
-  async function handleAddHabit() {
-    if (!user || isAddHabitButtonDisabled) {
+  async function fetchHabits() {
+    const { data, error } = await supabase.auth.getSession();
+    if (error) {
+      Alert.alert("Cannot retrieve habits", error.message);
       return;
     }
 
+    const accessToken = data.session?.access_token;
+
+    if (!accessToken) {
+      Alert.alert("You are not signed in");
+      return;
+    }
+
+    const res = await fetch(
+      `${process.env.EXPO_PUBLIC_API_URL}/supabase/get_habits`,
+      {
+        method: "GET",
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+        },
+      },
+    );
+
+    const response = await res.json();
+
+    if (res.status !== 200) {
+      Alert.alert(`${response.message}`);
+      return;
+    }
+
+    setHabits(response.habits ?? []);
+
+    console.log("habits retreived");
+  }
+
+  // call the habits function every time home gets focused.
+  useFocusEffect(
+    useCallback(() => {
+      void fetchHabits();
+    }, []),
+  );
+
+  async function handleAddHabit() {
     const newHabit: NewHabit = {
       name: habitName.trim(),
-      user_id: user.id,
       notification_time: formatTimeForSupabase(notificationTime),
       notification_enabled: true,
       repeat_days: selectedDays,
     };
 
-    const { data, error } = await supabase
-      .from("habits")
-      .insert(newHabit)
-      .select()
-      .single();
-
+    const { data, error } = await supabase.auth.getSession();
     if (error) {
-      Alert.alert("Unable to add habit", error.message);
+      Alert.alert(error.message);
       return;
     }
 
-    setHabits((currentHabits) => [...currentHabits, data]);
+    const accessToken = data.session?.access_token;
+
+    if (!accessToken) {
+      Alert.alert("You are not signed in");
+      return;
+    }
+
+    const res = await fetch(
+      `${process.env.EXPO_PUBLIC_API_URL}/supabase/add_habit`,
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer " + accessToken,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(newHabit),
+      },
+    );
+
+    const response = await res.json();
+
+    if (!res.ok) {
+      Alert.alert(response.message);
+      return;
+    }
+
+    const notificationGranted = await requestNotificationPermission();
+
+    if (!notificationGranted) {
+      Alert.alert(
+        "Notifications disabled",
+        "The habit was created, but reminders are turned off.",
+      );
+      await fetchHabits();
+      resetHabitForm();
+      return;
+    }
+
+    const newlyInsertedHabitId = response.returnedHabit.id;
+
+    const notificationIDs: string[] = [];
+    for (const day of selectedDays) {
+      const notificationID = await scheduleHabitNotification(
+        newlyInsertedHabitId,
+        habitName.trim(),
+        notificationTime,
+        daysToNumber[day] + 1,
+      );
+
+      notificationIDs.push(notificationID);
+    }
+
+    await saveNotificationIds(newlyInsertedHabitId, notificationIDs);
+
+    await fetchHabits();
     resetHabitForm();
   }
 
   async function deleteHabitFromDB(habitId: number) {
-    if (!user) {
-      return;
-    }
-
-    const { error } = await supabase
-      .from("habits")
-      .delete()
-      .eq("id", habitId)
-      .eq("user_id", user.id);
+    const { data, error } = await supabase.auth.getSession();
 
     if (error) {
-      Alert.alert("Unable to delete habit", error.message);
+      Alert.alert(error.message);
       return;
     }
 
+    const accessToken = data.session?.access_token;
+
+    if (!accessToken) {
+      Alert.alert("No user signed in");
+      return;
+    }
+
+    const res = await fetch(
+      `${process.env.EXPO_PUBLIC_API_URL}/supabase/delete_habit`,
+      {
+        method: "DELETE",
+        headers: {
+          authorization: "Bearer " + accessToken,
+          "Content-type": "application/json",
+        },
+        body: JSON.stringify({ habitId }),
+      },
+    );
+
+    const response = await res.json();
+
+    if (!res.ok) {
+      Alert.alert(response.message);
+      return;
+    }
+    await cancelHabitNotifications(habitId);
     swipeableRefs.delete(habitId);
 
-    setHabits((currentHabits) =>
-      currentHabits.filter((habit) => habit.id !== habitId),
-    );
+    await fetchHabits();
   }
 
   function handleSwipeDelete(habitId: number) {
@@ -277,6 +280,13 @@ export default function HomeScreen() {
         ? currentDays.filter((selectedDay) => selectedDay !== day)
         : [...currentDays, day],
     );
+  }
+
+  function resetHabitForm() {
+    setHabitName("");
+    setNotificationTime(new Date(2026, 0, 1, 23, 59));
+    setSelectedDays([]);
+    setIsModalVisible(false);
   }
 
   return (

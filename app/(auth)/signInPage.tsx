@@ -28,14 +28,6 @@ export default function SignInPage() {
   const isDisabled = !email.trim() || !password;
 
   async function handleUserSignIn() {
-    if (isDisabled) {
-      Alert.alert(
-        "Missing information",
-        "Please enter your email and password.",
-      );
-      return;
-    }
-
     const { error } = await supabase.auth.signInWithPassword({
       email: email.trim(),
       password,
