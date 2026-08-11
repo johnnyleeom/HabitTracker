@@ -23,6 +23,7 @@ export async function scheduleHabitNotification(
     content: {
       title: "Habit check-in",
       body: `Did you complete ${habitName}?`,
+      sound: "default",
       data: {
         habitId,
       },

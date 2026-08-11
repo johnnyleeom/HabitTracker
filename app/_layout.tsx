@@ -9,6 +9,15 @@ import { router, Stack } from "expo-router";
 import { useEffect, useRef } from "react";
 import "react-native-reanimated";
 
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowBanner: true,
+    shouldShowList: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
+
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const lastNotificationResponse = Notifications.useLastNotificationResponse();
