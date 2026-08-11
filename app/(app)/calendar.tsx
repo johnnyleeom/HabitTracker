@@ -347,7 +347,7 @@ export default function CalendarScreen() {
             horizontal={false}
             pagingEnabled
             hideExtraDays
-            current={new Date().toISOString().split("T")[0]}
+            current={formatDate(new Date())}
             calendarHeight={CALENDAR_HEIGHT}
             calendarWidth={calendarWidth}
             style={[styles.calendar, { width: calendarWidth }]}
@@ -421,6 +421,7 @@ export default function CalendarScreen() {
                         styles.dayText,
                         isSuccess && styles.successDayText,
                         isUnavailable && styles.unavailableDayText,
+                        !isScheduled && styles.unscheduledDayText,
                       ]}
                     >
                       {date.day}
@@ -1101,5 +1102,9 @@ const styles = StyleSheet.create({
     color: COLORS.secondaryText,
     fontSize: 14,
     fontWeight: "700",
+  },
+
+  unscheduledDayText: {
+    textDecorationLine: "line-through",
   },
 });

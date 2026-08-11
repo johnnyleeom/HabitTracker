@@ -2,7 +2,7 @@ import { formatDate, formatScheduleLine, getHabitStreak } from "@/utils/helper";
 import { supabase } from "@/utils/supabase";
 import * as Haptics from "expo-haptics";
 import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Pressable,
@@ -47,6 +47,7 @@ export default function NotificationScreen() {
   const [scheduleText, setScheduleText] = useState("");
   const [selection, setSelection] = useState<Selection>(null);
   const [isAnimating, setIsAnimating] = useState(false);
+  const redirectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // fetch habits when it first mounts
   // set habit
@@ -93,6 +94,24 @@ export default function NotificationScreen() {
 
     void getHabitData();
   }, [habitId]);
+
+  // time out thingy
+  useEffect(() => {
+    return () => {
+      if (redirectTimeoutRef.current) {
+        clearTimeout(redirectTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  function returnToApp() {
+    if (redirectTimeoutRef.current) {
+      clearTimeout(redirectTimeoutRef.current);
+      redirectTimeoutRef.current = null;
+    }
+
+    router.replace("/(app)");
+  }
 
   async function addNewLog(selection: Exclude<Selection, null>) {
     if (!habit) {
@@ -206,7 +225,7 @@ export default function NotificationScreen() {
       }),
     );
 
-    setTimeout(() => {
+    redirectTimeoutRef.current = setTimeout(() => {
       router.replace("/(app)");
     }, 3000);
   }
@@ -428,7 +447,7 @@ export default function NotificationScreen() {
 
         <Animated.View style={[styles.bottomSection, bottomStyle]}>
           <Pressable
-            onPress={() => router.replace("/(app)")}
+            onPress={returnToApp}
             style={({ pressed }) => [
               styles.returnButton,
               pressed && styles.returnButtonPressed,
@@ -508,7 +527,7 @@ export default function NotificationScreen() {
         </Text>
 
         <Pressable
-          onPress={() => router.replace("/(app)")}
+          onPress={returnToApp}
           style={({ pressed }) => [
             styles.continueButton,
             pressed && styles.continueButtonPressed,

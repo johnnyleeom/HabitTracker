@@ -234,8 +234,6 @@ export default function HomeScreen() {
       return;
     }
 
-    await cancelHabitNotifications(habitId);
-
     const res = await fetch(
       `${process.env.EXPO_PUBLIC_API_URL}/supabase/delete_habit`,
       {
@@ -254,7 +252,7 @@ export default function HomeScreen() {
       Alert.alert(response.message);
       return;
     }
-
+    await cancelHabitNotifications(habitId);
     swipeableRefs.delete(habitId);
 
     await fetchHabits();
