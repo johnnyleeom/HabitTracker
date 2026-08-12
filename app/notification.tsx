@@ -21,7 +21,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import Svg, { Circle, Path } from "react-native-svg";
-import { StoredHabit } from "./types/habit";
+import { StoredHabit } from "../types/habit";
 
 type Selection = "yes" | "no" | null;
 
@@ -525,26 +525,6 @@ export default function NotificationScreen() {
             ? "Another step forward."
             : "Tomorrow is another chance."}
         </Text>
-
-        <Pressable
-          onPress={returnToApp}
-          style={({ pressed }) => [
-            styles.continueButton,
-            pressed && styles.continueButtonPressed,
-          ]}
-        >
-          <Text style={styles.continueButtonText}>Continue</Text>
-        </Pressable>
-
-        <Pressable
-          onPress={resetAnimation}
-          style={({ pressed }) => [
-            styles.goBackButton,
-            pressed && styles.goBackButtonPressed,
-          ]}
-        >
-          <Text style={styles.goBackText}>Go back</Text>
-        </Pressable>
       </Animated.View>
     </View>
   );

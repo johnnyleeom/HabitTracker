@@ -1,4 +1,4 @@
-import { StoredHabit } from "@/app/types/habit";
+import { StoredHabit } from "@/types/habit";
 
 export const daysToNumber: Record<string, number> = {
   sunday: 0,

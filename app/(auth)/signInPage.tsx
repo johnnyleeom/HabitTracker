@@ -1,5 +1,5 @@
 import { supabase } from "@/utils/supabase";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import {
   Alert,
@@ -24,6 +24,9 @@ const COLORS = {
 export default function SignInPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const { habitId } = useLocalSearchParams<{
+    habitId?: string;
+  }>();
 
   const isDisabled = !email.trim() || !password;
 
@@ -36,6 +39,17 @@ export default function SignInPage() {
     if (error) {
       console.log(error.message);
       Alert.alert("Login failed", "Incorrect email or password.");
+      return;
+    }
+
+    if (habitId) {
+      router.replace({
+        pathname: "/notification",
+        params: {
+          habitId: habitId.toString(),
+        },
+      });
+
       return;
     }
 

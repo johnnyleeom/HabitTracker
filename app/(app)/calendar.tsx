@@ -21,7 +21,7 @@ import {
   View,
 } from "react-native";
 import { CalendarList, DateData } from "react-native-calendars";
-import { StoredHabit } from "../types/habit";
+import { StoredHabit } from "../../types/habit";
 
 const CALENDAR_HEIGHT = 420;
 const CALENDAR_SIDE_BLEED = 8;

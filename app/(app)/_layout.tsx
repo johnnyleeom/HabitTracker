@@ -22,12 +22,6 @@ export default function RootLayout() {
           <Tabs.Screen name="index" options={{ title: "Home" }} />
           <Tabs.Screen name="calendar" options={{ title: "Calendar" }} />
           <Tabs.Screen name="profile" options={{ title: "Settings" }} />
-          <Tabs.Screen
-            name="notification"
-            // options={{
-            //   href: null,
-            // }}
-          />
         </Tabs>
       </ThemeProvider>
     </GestureHandlerRootView>

@@ -73,7 +73,7 @@ export default function LogInScreen() {
             <Text style={styles.secondaryButtonText}>Create Account</Text>
           </Pressable>
 
-          <View style={styles.dividerContainer}>
+          {/* <View style={styles.dividerContainer}>
             <View style={styles.dividerLine} />
             <Text style={styles.dividerText}>OR CONTINUE WITH</Text>
             <View style={styles.dividerLine} />
@@ -99,7 +99,7 @@ export default function LogInScreen() {
             >
               <Text style={styles.socialButtonText}>Apple</Text>
             </Pressable>
-          </View>
+          </View> */}
         </View>
       </View>
     </View>

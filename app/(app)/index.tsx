@@ -31,8 +31,8 @@ import {
   GestureHandlerRootView,
   Swipeable,
 } from "react-native-gesture-handler";
-import { NewHabit, StoredHabit } from "../types/habit";
-import { Day, days } from "../types/notificationFreq";
+import { NewHabit, StoredHabit } from "../../types/habit";
+import { Day, days } from "../../types/notificationFreq";
 
 // Visible-card layout: exactly 3 full cards fit, a 4th peeks in and fades.
 const CARD_GAP = 14;
