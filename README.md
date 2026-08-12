@@ -1,50 +1,140 @@
-# Welcome to your Expo app 👋
+# Habit Tracker
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+A mobile habit-tracking app built around quick daily check-ins. Users can create recurring habits, receive scheduled reminders, record progress through a notification flow, and review their history and streaks in a calendar.
 
-## Get started
+## Features
 
-1. Install dependencies
+- Email and password authentication
+- Create and delete habits
+- Custom weekly schedules and reminder times
+- Local iOS notifications for scheduled habits
+- Dedicated notification check-in flow
+- Calendar-based progress history
+- Current and best streak tracking
+- Persistent user sessions
+- Dark, mobile-first interface
 
-   ```bash
-   npm install
-   ```
+## Tech Stack
 
-2. Start the app
+### Mobile App
 
-   ```bash
-   npx expo start
-   ```
+- React Native
+- Expo
+- Expo Router
+- TypeScript
+- Expo Notifications
+- React Native Reanimated
 
-In the output, you'll find options to open the app in a
+### Backend
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+- Node.js
+- Express
+- TypeScript
+- Supabase Authentication
+- PostgreSQL
+- Supabase Row Level Security
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+## Architecture
 
-## Get a fresh project
+The Expo app authenticates users through Supabase and sends authenticated requests to the Express API.
 
-When you're ready, run:
+The API validates the user's access token and performs database operations through a request-scoped Supabase client. Supabase Row Level Security policies ensure that users can only access their own data.
 
-```bash
-npm run reset-project
+```text
+Expo Mobile App → Express API → Supabase
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Habit reminders are scheduled locally on the device. When a user opens a reminder, the app navigates to a focused check-in screen and records the selected response through the API.
 
-## Learn more
+## Project Structure
 
-To learn more about developing your project with Expo, look at the following resources:
+```text
+app/          Expo Router screens and layouts
+assets/       App icons and static assets
+components/   Reusable interface components
+constants/    Shared application constants
+hooks/        Custom React hooks
+server/       Express backend
+types/        Shared TypeScript types
+utils/        Date, notification, streak, and Supabase utilities
+```
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+## Getting Started
 
-## Join the community
+### Prerequisites
 
-Join our community of developers creating universal apps.
+- Node.js
+- npm
+- Expo Go
+- A Supabase project
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+### Installation
+
+Clone the repository:
+
+```bash
+git clone https://github.com/johnnyleeom/HabitTracker.git
+cd HabitTracker
+```
+
+Install the mobile app dependencies:
+
+```bash
+npm install
+```
+
+Install the backend dependencies:
+
+```bash
+cd server
+npm install
+```
+
+### Environment Variables
+
+Create the required `.env` files for the mobile app and backend.
+
+### Environment Variables
+
+Mobile app:
+
+```env
+EXPO_PUBLIC_API_URL=
+EXPO_PUBLIC_SUPABASE_URL=
+EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
+```
+
+Backend:
+
+```env
+EXPO_PUBLIC_SUPABASE_URL=
+EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
+```
+
+Do not commit `.env` files or private credentials.
+
+### Run the Backend
+
+From the `server` directory:
+
+```bash
+npm run dev
+```
+
+### Run the Mobile App
+
+From the project root:
+
+```bash
+npx expo start
+```
+
+Open the project using Expo Go, by scanning the QR code.
+
+## Status
+
+The application is currently being prepared for its initial iOS release.
+
+## License
+
+This project is currently not licensed for reuse.

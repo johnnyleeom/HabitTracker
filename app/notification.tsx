@@ -230,26 +230,6 @@ export default function NotificationScreen() {
     }, 3000);
   }
 
-  function resetAnimation() {
-    resultProgress.value = withTiming(0, {
-      duration: 220,
-    });
-
-    exitProgress.value = withDelay(
-      120,
-      withTiming(0, {
-        duration: 480,
-        easing: Easing.inOut(Easing.cubic),
-      }),
-    );
-
-    circleProgress.value = 0;
-    symbolProgress.value = 0;
-
-    setSelection(null);
-    setIsAnimating(false);
-  }
-
   const eyebrowStyle = useAnimatedStyle(() => ({
     opacity: 1 - exitProgress.value,
     transform: [
