@@ -1,4 +1,5 @@
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { Ionicons } from "@expo/vector-icons";
 import {
   DarkTheme,
   DefaultTheme,
@@ -17,11 +18,43 @@ export default function RootLayout() {
         <Tabs
           screenOptions={{
             headerShown: false,
+            tabBarStyle: {
+              backgroundColor: "transparent",
+              borderTopWidth: 0,
+              elevation: 0,
+            },
+            tabBarBackground: () => null,
           }}
         >
-          <Tabs.Screen name="index" options={{ title: "Home" }} />
-          <Tabs.Screen name="calendar" options={{ title: "Calendar" }} />
-          <Tabs.Screen name="profile" options={{ title: "Settings" }} />
+          <Tabs.Screen
+            name="index"
+            options={{
+              title: "Home",
+              tabBarIcon: ({ color, size }) => (
+                <Ionicons name="home" size={size} color={color} />
+              ),
+            }}
+          />
+
+          <Tabs.Screen
+            name="calendar"
+            options={{
+              title: "Calendar",
+              tabBarIcon: ({ color, size }) => (
+                <Ionicons name="calendar" size={size} color={color} />
+              ),
+            }}
+          />
+
+          <Tabs.Screen
+            name="profile"
+            options={{
+              title: "Settings",
+              tabBarIcon: ({ color, size }) => (
+                <Ionicons name="settings" size={size} color={color} />
+              ),
+            }}
+          />
         </Tabs>
       </ThemeProvider>
     </GestureHandlerRootView>
