@@ -4,6 +4,7 @@ import { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Linking,
   Pressable,
   StyleSheet,
   Text,
@@ -20,6 +21,18 @@ const COLORS = {
 };
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
+
+function openPrivacyPolicy() {
+  void Linking.openURL(
+    "https://johnnyleeom.github.io/HabitTracker/privacy.html",
+  );
+}
+
+function openSupportPage() {
+  void Linking.openURL(
+    "https://johnnyleeom.github.io/HabitTracker/support.html",
+  );
+}
 
 export default function SettingsScreen() {
   const [isDeleting, setIsDeleting] = useState(false);
@@ -175,6 +188,20 @@ export default function SettingsScreen() {
           )}
         </Pressable>
       </View>
+
+      <View style={[styles.card, styles.linksCard]}>
+        <Text style={styles.sectionLabel}>ABOUT</Text>
+
+        <Pressable onPress={openPrivacyPolicy}>
+          <Text style={styles.linkText}>Privacy Policy</Text>
+        </Pressable>
+
+        <View style={styles.divider} />
+
+        <Pressable onPress={openSupportPage}>
+          <Text style={styles.linkText}>Support</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -280,5 +307,20 @@ const styles = StyleSheet.create({
     color: COLORS.background,
     fontSize: 16,
     fontWeight: "800",
+  },
+  linksCard: {
+    marginTop: 16,
+  },
+
+  linkText: {
+    color: COLORS.text,
+    fontSize: 16,
+    fontWeight: "600",
+  },
+
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    marginVertical: 16,
+    backgroundColor: COLORS.border,
   },
 });
