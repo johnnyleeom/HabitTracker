@@ -4,6 +4,12 @@ const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
 const supabaseAPI = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY!;
 const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY!;
 
+console.log("Environment check:", {
+  hasSupabaseUrl: Boolean(process.env.EXPO_PUBLIC_SUPABASE_URL),
+  hasPublishableKey: Boolean(process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY),
+  hasSecretKey: Boolean(process.env.SUPABASE_SECRET_KEY),
+});
+
 export default function createUserSupabaseClient(accessToken: string) {
   return createClient(supabaseUrl, supabaseAPI, {
     global: {
