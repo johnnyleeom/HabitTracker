@@ -5,6 +5,8 @@ import createUserSupabaseClient, { supabaseAdmin } from "./utils/supabase.js";
 
 const app = express();
 
+app.set("trust proxy", 1);
+
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 200,
@@ -237,6 +239,8 @@ app.delete("/supabase/account_delete", async (req, res) => {
   const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(
     user.id,
   );
+
+  console.log("deletion hit");
 
   if (deleteError) {
     console.error("Unable to delete account:", deleteError);
