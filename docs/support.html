@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <title>HabitFlow Support</title>
+
+    <style>
+      :root {
+        color-scheme: dark;
+        --background: #080a09;
+        --surface: #171917;
+        --border: #2b2e2c;
+        --text: #ffffff;
+        --secondary-text: #a0a5a1;
+        --green: #34d487;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--background);
+        color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        line-height: 1.7;
+      }
+
+      main {
+        width: min(760px, calc(100% - 40px));
+        margin: 0 auto;
+        padding: 64px 0 80px;
+      }
+
+      .eyebrow {
+        margin: 0 0 8px;
+        color: var(--green);
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 2px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(36px, 7vw, 54px);
+        line-height: 1.1;
+        letter-spacing: -2px;
+      }
+
+      .subtitle {
+        margin: 14px 0 36px;
+        color: var(--secondary-text);
+      }
+
+      .card {
+        margin-top: 20px;
+        padding: 24px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 22px;
+      }
+
+      h2 {
+        margin: 0 0 12px;
+        font-size: 21px;
+      }
+
+      p {
+        margin: 0 0 14px;
+        color: var(--secondary-text);
+      }
+
+      p:last-child {
+        margin-bottom: 0;
+      }
+
+      ol,
+      ul {
+        margin: 0;
+        padding-left: 22px;
+        color: var(--secondary-text);
+      }
+
+      li + li {
+        margin-top: 8px;
+      }
+
+      strong {
+        color: var(--text);
+      }
+
+      a {
+        color: var(--green);
+      }
+
+      footer {
+        margin-top: 32px;
+        color: var(--secondary-text);
+        font-size: 14px;
+        text-align: center;
+      }
+    </style>
+  </head>
+
+  <body>
+    <main>
+      <p class="eyebrow">HABITFLOW</p>
+      <h1>Support</h1>
+
+      <p class="subtitle">
+        Get help with your HabitFlow account, habits, reminders, and progress.
+      </p>
+
+      <div class="card">
+        <h2>Contact Support</h2>
+        <p>
+          For assistance, email
+          <a href="mailto:habittracker.support@gmail.com">
+            habittracker.support@gmail.com </a
+          >.
+        </p>
+
+        <p>
+          Please describe the issue you are experiencing. Do not send your
+          password, access token, or other private credentials.
+        </p>
+      </div>
+
+      <div class="card">
+        <h2>Notification Troubleshooting</h2>
+        <ul>
+          <li>
+            Confirm that notifications are enabled for HabitFlow in your iPhone
+            Settings.
+          </li>
+          <li>
+            Confirm that the habit has a reminder time and scheduled days.
+          </li>
+          <li>
+            Check whether Focus mode or notification summaries are delaying the
+            notification.
+          </li>
+          <li>
+            Open HabitFlow after reinstalling the app so notification
+            permissions and reminders can be configured again.
+          </li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h2>Sign-In Issues</h2>
+        <ul>
+          <li>Confirm that your email address and password are correct.</li>
+          <li>Check that your device has an active internet connection.</li>
+          <li>
+            If your account was permanently deleted, it cannot be restored. You
+            may create a new account using the same email address.
+          </li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h2>Delete Your Account</h2>
+        <p>
+          You can permanently delete your HabitFlow account directly inside the
+          app:
+        </p>
+
+        <ol>
+          <li>Open HabitFlow.</li>
+          <li>Open the Settings tab.</li>
+          <li>Select <strong>Delete Account</strong>.</li>
+          <li>Confirm the deletion.</li>
+        </ol>
+
+        <p style="margin-top: 16px">
+          Deleting your account permanently removes your authentication account,
+          habits, and progress history. This action cannot be undone.
+        </p>
+      </div>
+
+      <div class="card">
+        <h2>Privacy</h2>
+        <p>
+          Learn how HabitFlow handles your information by reading the
+          <a href="./privacy.html">HabitFlow Privacy Policy</a>.
+        </p>
+      </div>
+
+      <footer>© 2026 HabitFlow</footer>
+    </main>
+  </body>
+</html>
