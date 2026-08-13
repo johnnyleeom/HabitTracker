@@ -1,7 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import { rateLimit } from "express-rate-limit";
-import createUserSupabaseClient from "./utils/supabase.js";
+import createUserSupabaseClient, { supabaseAdmin } from "./utils/supabase.js";
 
 const app = express();
 
@@ -208,6 +208,45 @@ app.get("/supabase/get_single_habit_data/:habitId", async (req, res) => {
     message: "success",
     habit: data,
   });
+});
+
+//Delete account
+app.delete("/supabase/account_delete", async (req, res) => {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader?.startsWith("Bearer ")) {
+    return res.status(401).json({
+      message: "Access token is required",
+    });
+  }
+
+  const accessToken = authHeader.slice("Bearer ".length);
+  const supabase = createUserSupabaseClient(accessToken);
+
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser(accessToken);
+
+  if (userError || !user) {
+    return res.status(401).json({
+      message: "Invalid or expired access token",
+    });
+  }
+
+  const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(
+    user.id,
+  );
+
+  if (deleteError) {
+    console.error("Unable to delete account:", deleteError);
+
+    return res.status(500).json({
+      message: "Unable to delete account",
+    });
+  }
+
+  return res.status(204).send();
 });
 
 app.listen(PORT, () => {

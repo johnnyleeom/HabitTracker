@@ -1,6 +1,14 @@
 import { supabase } from "@/utils/supabase";
 import { router } from "expo-router";
-import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 
 const COLORS = {
   background: "#000000",
@@ -11,7 +19,11 @@ const COLORS = {
   red: "#FF6259",
 };
 
+const API_URL = process.env.EXPO_PUBLIC_API_URL;
+
 export default function SettingsScreen() {
+  const [isDeleting, setIsDeleting] = useState(false);
+
   async function handleSignOut() {
     const { error } = await supabase.auth.signOut();
 
@@ -43,6 +55,80 @@ export default function SettingsScreen() {
     );
   }
 
+  async function handleDeleteAccount() {
+    try {
+      setIsDeleting(true);
+
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
+      if (sessionError || !session) {
+        Alert.alert(
+          "Unable to delete account",
+          "Your session has expired. Please sign in again.",
+        );
+        router.replace("/(auth)");
+        return;
+      }
+
+      if (!API_URL) {
+        Alert.alert(
+          "Unable to delete account",
+          "The server is not configured.",
+        );
+        return;
+      }
+
+      const response = await fetch(`${API_URL}/supabase/account_delete`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+
+        throw new Error(data?.message ?? "Account deletion failed.");
+      }
+
+      await supabase.auth.signOut();
+
+      router.replace("/(auth)");
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Something went wrong while deleting your account.";
+
+      Alert.alert("Unable to delete account", message);
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
+  function confirmDeleteAccount() {
+    Alert.alert(
+      "Delete account?",
+      "This permanently deletes your account, habits, and progress history. This cannot be undone.",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Delete Account",
+          style: "destructive",
+          onPress: () => {
+            void handleDeleteAccount();
+          },
+        },
+      ],
+    );
+  }
+
   return (
     <View style={styles.screen}>
       <View style={styles.header}>
@@ -56,13 +142,37 @@ export default function SettingsScreen() {
         <Text style={styles.sectionLabel}>ACCOUNT</Text>
 
         <Pressable
+          disabled={isDeleting}
           style={({ pressed }) => [
             styles.signOutButton,
-            pressed && styles.signOutButtonPressed,
+            pressed && styles.buttonPressed,
           ]}
           onPress={confirmSignOut}
         >
           <Text style={styles.signOutText}>Sign Out</Text>
+        </Pressable>
+      </View>
+
+      <View style={[styles.card, styles.dangerCard]}>
+        <Text style={styles.dangerLabel}>DANGER ZONE</Text>
+
+        <Text style={styles.dangerDescription}>
+          Permanently delete your account, habits, and progress history.
+        </Text>
+
+        <Pressable
+          disabled={isDeleting}
+          style={({ pressed }) => [
+            styles.deleteButton,
+            (pressed || isDeleting) && styles.buttonPressed,
+          ]}
+          onPress={confirmDeleteAccount}
+        >
+          {isDeleting ? (
+            <ActivityIndicator color={COLORS.background} />
+          ) : (
+            <Text style={styles.deleteText}>Delete Account</Text>
+          )}
         </Pressable>
       </View>
     </View>
@@ -111,12 +221,31 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
   },
 
+  dangerCard: {
+    marginTop: 16,
+  },
+
   sectionLabel: {
     marginBottom: 16,
     color: COLORS.secondaryText,
     fontSize: 11,
     fontWeight: "700",
     letterSpacing: 2.2,
+  },
+
+  dangerLabel: {
+    marginBottom: 8,
+    color: COLORS.red,
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 2.2,
+  },
+
+  dangerDescription: {
+    marginBottom: 16,
+    color: COLORS.secondaryText,
+    fontSize: 14,
+    lineHeight: 20,
   },
 
   signOutButton: {
@@ -128,7 +257,15 @@ const styles = StyleSheet.create({
     borderColor: COLORS.red,
   },
 
-  signOutButtonPressed: {
+  deleteButton: {
+    minHeight: 56,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 18,
+    backgroundColor: COLORS.red,
+  },
+
+  buttonPressed: {
     opacity: 0.65,
     transform: [{ scale: 0.98 }],
   },
@@ -137,5 +274,11 @@ const styles = StyleSheet.create({
     color: COLORS.red,
     fontSize: 16,
     fontWeight: "700",
+  },
+
+  deleteText: {
+    color: COLORS.background,
+    fontSize: 16,
+    fontWeight: "800",
   },
 });
