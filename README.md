@@ -2,6 +2,24 @@
 
 A mobile habit-tracking app built around quick daily check-ins. Users can create recurring habits, receive scheduled reminders, record progress through a notification flow, and review their history and streaks in a calendar.
 
+## App Preview
+
+### Get Started
+
+<p align="center">
+  <img src="assets/images/landing.png" width="30%" alt="Habit Tracker landing screen" />
+  <img src="assets/images/signin.png" width="30%" alt="Habit Tracker sign in screen" />
+  <img src="assets/images/signup.png" width="30%" alt="Habit Tracker create account screen" />
+</p>
+
+### Track Your Routine
+
+<p align="center">
+  <img src="assets/images/home.png" width="30%" alt="Habit Tracker home screen" />
+  <img src="assets/images/create-habit.png" width="30%" alt="Habit Tracker create habit screen" />
+  <img src="assets/images/calendar.png" width="30%" alt="Habit Tracker calendar and streak screen" />
+</p>
+
 ## Features
 
 - Email and password authentication
@@ -50,7 +68,7 @@ Habit reminders are scheduled locally on the device. When a user opens a reminde
 
 ```text
 app/          Expo Router screens and layouts
-assets/       App icons and static assets
+assets/       App icons, screenshots, and static assets
 components/   Reusable interface components
 constants/    Shared application constants
 hooks/        Custom React hooks
@@ -94,8 +112,6 @@ npm install
 
 Create the required `.env` files for the mobile app and backend.
 
-### Environment Variables
-
 Mobile app:
 
 ```env
@@ -129,11 +145,11 @@ From the project root:
 npx expo start
 ```
 
-Open the project using Expo Go, by scanning the QR code.
+Open the project using Expo Go by scanning the QR code.
 
 ## Status
 
-The application is currently being prepared for its initial iOS release.
+The initial iOS release has been submitted to the App Store for review.
 
 ## License
 
