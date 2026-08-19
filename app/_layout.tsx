@@ -1,10 +1,5 @@
-import { useColorScheme } from "@/hooks/use-color-scheme";
 import { supabase } from "@/utils/supabase";
-import {
-  DarkTheme,
-  DefaultTheme,
-  ThemeProvider,
-} from "@react-navigation/native";
+import { DarkTheme, ThemeProvider } from "@react-navigation/native";
 import * as Notifications from "expo-notifications";
 import { router, Stack } from "expo-router";
 import { useEffect, useRef } from "react";
@@ -21,7 +16,6 @@ Notifications.setNotificationHandler({
 });
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
   const lastNotificationResponse = Notifications.useLastNotificationResponse();
   const lastHandledNotificationId = useRef<string | null>(null);
   const hasHandledStart = useRef(false);
@@ -119,7 +113,7 @@ export default function RootLayout() {
   }, [lastNotificationResponse]);
 
   return (
-    <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
+    <ThemeProvider value={DarkTheme}>
       <Stack screenOptions={{ headerShown: false }} />
     </ThemeProvider>
   );
