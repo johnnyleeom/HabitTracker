@@ -14,17 +14,15 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useFocusEffect } from "expo-router";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
   Alert,
   Modal,
-  PlatformColor,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
-  useColorScheme,
   View,
 } from "react-native";
 import {
@@ -43,31 +41,28 @@ const FALLBACK_CARD_HEIGHT = 108;
 const ACCENT = "#34C759";
 const DANGER = "#FF3B30";
 
-function getTheme(isDark: boolean) {
+function getTheme() {
   return {
-    screen: PlatformColor("systemBackground"),
-    elevated: PlatformColor("secondarySystemBackground"),
-    card: PlatformColor("secondarySystemBackground"),
-    field: PlatformColor("tertiarySystemBackground"),
-    text: PlatformColor("label"),
-    secondaryText: PlatformColor("secondaryLabel"),
-    tertiaryText: PlatformColor("tertiaryLabel"),
-    border: PlatformColor("separator"),
-    buttonBackground: PlatformColor("label"),
-    buttonText: PlatformColor("systemBackground"),
-    overlay: isDark ? "rgba(0, 0, 0, 0.72)" : "rgba(0, 0, 0, 0.35)",
-    fadeEnd: isDark ? "rgba(0, 0, 0, 1)" : "rgba(255, 255, 255, 1)",
-    disabled: PlatformColor("systemGray4"),
-    dotInactive: isDark ? "rgba(255,255,255,0.12)" : "rgba(60,60,67,0.18)",
+    screen: "#000000",
+    elevated: "#171717",
+    card: "#171717",
+    field: "#1D1D1F",
+    text: "#FFFFFF",
+    secondaryText: "#929298",
+    tertiaryText: "#6E6E73",
+    border: "#2B2B2E",
+    buttonBackground: "#FFFFFF",
+    buttonText: "#000000",
+    overlay: "rgba(0, 0, 0, 0.72)",
+    fadeEnd: "rgba(0, 0, 0, 1)",
+    disabled: "#3A3A3C",
+    dotInactive: "rgba(255,255,255,0.12)",
   };
 }
 
 export default function HomeScreen() {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === "dark";
-  const theme = useMemo(() => getTheme(isDark), [isDark]);
-  const styles = useMemo(() => createStyles(theme), [theme]);
-
+  const theme = getTheme();
+  const styles = createStyles(theme);
   const [habits, setHabits] = useState<StoredHabit[]>([]);
   const [habitName, setHabitName] = useState("");
   const [isModalVisible, setIsModalVisible] = useState(false);
@@ -478,7 +473,7 @@ export default function HomeScreen() {
                 value={notificationTime}
                 mode="time"
                 display="spinner"
-                themeVariant={isDark ? "dark" : "light"}
+                themeVariant={"dark"}
                 onChange={(_, selectedTime) => {
                   if (selectedTime) {
                     setNotificationTime(selectedTime);
